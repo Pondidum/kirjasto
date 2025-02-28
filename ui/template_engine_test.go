@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
@@ -34,8 +35,9 @@ func TestTemplateEngineParsing(t *testing.T) {
 	te := NewTemplateEngine()
 	assert.NoError(t, te.ParseTemplates(context.Background()))
 
-	content, err := te.Render(context.Background(), "catalogue/catalogue.html")
-	assert.NoError(t, err)
-	assert.Equal(t, expected, string(content))
+	content := &bytes.Buffer{}
+
+	assert.NoError(t, te.Render(context.Background(), "catalogue/catalogue.html", map[string]any{}, content))
+	assert.Equal(t, expected, content.String())
 
 }

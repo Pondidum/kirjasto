@@ -1,9 +1,9 @@
 package ui
 
 import (
-	"bytes"
 	"context"
 	"embed"
+	"io"
 	"kirjasto/tracing"
 	"path"
 	"strings"
@@ -89,7 +89,7 @@ func (te *TemplateEngine) ParseTemplates(ctx context.Context) error {
 	return nil
 }
 
-func (te *TemplateEngine) Render(ctx context.Context, template string) ([]byte, error) {
+func (te *TemplateEngine) Render(ctx context.Context, template string, data any, writer io.Writer) error {
 	ctx, span := tr.Start(ctx, "render")
 	defer span.End()
 
@@ -101,13 +101,11 @@ func (te *TemplateEngine) Render(ctx context.Context, template string) ([]byte, 
 	)
 
 	if !found {
-		return nil, tracing.Errorf(span, "no template called %s found", template)
+		return tracing.Errorf(span, "no template called %s found", template)
 	}
 
-	b := &bytes.Buffer{}
-	if err := tpl.ExecuteTemplate(b, "base", map[string]any{}); err != nil {
-		return nil, tracing.Error(span, err)
+	if err := tpl.ExecuteTemplate(writer, "base", data); err != nil {
+		return tracing.Error(span, err)
 	}
-
-	return b.Bytes(), nil
+	return nil
 }
