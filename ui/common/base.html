@@ -1,0 +1,16 @@
+{{ define "base" }}
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>{{ template "title" . }} - Kirjasto</title>
+
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  </head>
+  <body>
+    <main id="main">
+      {{- template "content" .}}
+    </main>
+  </body>
+</html>
+{{ end }}
