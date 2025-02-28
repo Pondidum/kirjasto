@@ -6,6 +6,7 @@ import (
 	"kirjasto/config"
 	"kirjasto/tracing"
 	"kirjasto/ui"
+	"kirjasto/ui/catalogue"
 	"net/http"
 
 	"github.com/spf13/pflag"
@@ -42,12 +43,7 @@ func (c *ServerCommand) Execute(ctx context.Context, config *config.Config, args
 	}
 
 	server := http.NewServeMux()
-	server.HandleFunc("GET /catalogue", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
-		if err := engine.Render(r.Context(), "catalogue/catalogue.html", w); err != nil {
-			w.WriteHeader(500)
-		}
-	})
+	catalogue.RegisterHandlers(server, engine)
 
 	fmt.Println("Listening on", c.address)
 	if err := http.ListenAndServe(c.address, server); err != nil {
