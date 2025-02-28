@@ -7,6 +7,7 @@ import (
 	"kirjasto/tracing"
 	"kirjasto/ui"
 	"kirjasto/ui/catalogue"
+	"kirjasto/ui/common"
 	"net/http"
 
 	"github.com/spf13/pflag"
@@ -43,6 +44,7 @@ func (c *ServerCommand) Execute(ctx context.Context, config *config.Config, args
 	}
 
 	server := http.NewServeMux()
+	common.RegisterHandlers(server)
 	catalogue.RegisterHandlers(server, engine)
 
 	fmt.Println("Listening on", c.address)
