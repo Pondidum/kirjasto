@@ -44,7 +44,10 @@ func (c *ServerCommand) Execute(ctx context.Context, config *config.Config, args
 	}
 
 	server := http.NewServeMux()
-	common.RegisterHandlers(server)
+	if err := common.RegisterHandlers(ctx, server); err != nil {
+		return tracing.Error(span, err)
+	}
+
 	catalogue.RegisterHandlers(server, engine)
 
 	fmt.Println("Listening on", c.address)
