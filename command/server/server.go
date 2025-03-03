@@ -6,8 +6,6 @@ import (
 	"kirjasto/config"
 	"kirjasto/tracing"
 	"kirjasto/ui"
-	"kirjasto/ui/catalogue"
-	"kirjasto/ui/common"
 	"net/http"
 
 	"github.com/spf13/pflag"
@@ -38,17 +36,11 @@ func (c *ServerCommand) Execute(ctx context.Context, config *config.Config, args
 	ctx, span := tr.Start(ctx, "execute")
 	defer span.End()
 
-	engine := ui.NewTemplateEngine()
-	if err := engine.ParseTemplates(ctx); err != nil {
-		return tracing.Error(span, err)
-	}
-
 	server := http.NewServeMux()
-	if err := common.RegisterHandlers(ctx, server); err != nil {
+
+	if err := ui.RegisterUI(ctx, server); err != nil {
 		return tracing.Error(span, err)
 	}
-
-	catalogue.RegisterHandlers(server, engine)
 
 	fmt.Println("Listening on", c.address)
 	if err := http.ListenAndServe(c.address, server); err != nil {

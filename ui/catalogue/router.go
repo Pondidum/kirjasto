@@ -1,11 +1,12 @@
 package catalogue
 
 import (
-	"kirjasto/ui"
+	"context"
+	"kirjasto/template"
 	"net/http"
 )
 
-func RegisterHandlers(mux *http.ServeMux, engine *ui.TemplateEngine) {
+func RegisterHandlers(ctx context.Context, mux *http.ServeMux, engine *template.TemplateEngine) error {
 
 	mux.HandleFunc("GET /catalogue", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
@@ -26,6 +27,8 @@ func RegisterHandlers(mux *http.ServeMux, engine *ui.TemplateEngine) {
 			w.WriteHeader(500)
 		}
 	})
+
+	return nil
 }
 
 type Book struct {

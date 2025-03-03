@@ -1,8 +1,9 @@
-package ui
+package template
 
 import (
 	"bytes"
 	"context"
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -32,7 +33,7 @@ const expected = `
 
 func TestTemplateEngineParsing(t *testing.T) {
 
-	te := NewTemplateEngine()
+	te := NewTemplateEngine(os.DirFS("./").(FS))
 	assert.NoError(t, te.ParseTemplates(context.Background()))
 
 	content := &bytes.Buffer{}

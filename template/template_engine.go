@@ -1,9 +1,9 @@
-package ui
+package template
 
 import (
 	"context"
-	"embed"
 	"io"
+	"io/fs"
 	"kirjasto/tracing"
 	"path"
 	"strings"
@@ -13,17 +13,21 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 )
 
-var tr = otel.Tracer("ui")
+var tr = otel.Tracer("template")
 
-//go:embed */*.html
-var templatesSource embed.FS
+type FS interface {
+	fs.ReadFileFS
+	fs.ReadDirFS
+}
 
 type TemplateEngine struct {
+	source    FS
 	templates map[string]*template.Template
 }
 
-func NewTemplateEngine() *TemplateEngine {
+func NewTemplateEngine(source FS) *TemplateEngine {
 	return &TemplateEngine{
+		source:    source,
 		templates: map[string]*template.Template{},
 	}
 }
@@ -32,21 +36,25 @@ func (te *TemplateEngine) ParseTemplates(ctx context.Context) error {
 	ctx, span := tr.Start(ctx, "parse_templates")
 	defer span.End()
 
-	dir, err := templatesSource.ReadDir("common")
+	dir, err := te.source.ReadDir("common")
 	if err != nil {
 		return tracing.Error(span, err)
 	}
 
 	commonContents := &strings.Builder{}
 	for _, entry := range dir {
-		content, err := templatesSource.ReadFile(path.Join("common", entry.Name()))
+		if entry.IsDir() {
+			continue
+		}
+
+		content, err := te.source.ReadFile(path.Join("common", entry.Name()))
 		if err != nil {
 			return tracing.Error(span, err)
 		}
 		commonContents.Write(content)
 	}
 
-	dir, err = templatesSource.ReadDir(".")
+	dir, err = te.source.ReadDir(".")
 	if err != nil {
 		return tracing.Error(span, err)
 	}
@@ -61,14 +69,14 @@ func (te *TemplateEngine) ParseTemplates(ctx context.Context) error {
 			continue
 		}
 
-		files, err := templatesSource.ReadDir(entry.Name())
+		files, err := te.source.ReadDir(entry.Name())
 		if err != nil {
 			return tracing.Error(span, err)
 		}
 
 		for _, file := range files {
 			name := path.Join(entry.Name(), file.Name())
-			content, err := templatesSource.ReadFile(name)
+			content, err := te.source.ReadFile(name)
 			if err != nil {
 				return tracing.Error(span, err)
 			}
