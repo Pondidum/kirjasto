@@ -5,8 +5,11 @@ import (
 )
 
 type Config struct {
+	DatabaseFile string
 }
 
 func CreateConfig(ctx context.Context) (*Config, error) {
-	return &Config{}, nil
+	return &Config{
+		DatabaseFile: "dev.sqlite",
+	}, nil
 }

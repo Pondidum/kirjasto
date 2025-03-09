@@ -11,6 +11,14 @@
       "mode": "auto",
       "program": "${workspaceFolder}",
       "args": ["server"]
+    },
+    {
+      "name": "import authors",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "args": ["import", ".data/openlibrary/ol_dump_authors_2025-02-11.txt"]
     }
   ]
 }
