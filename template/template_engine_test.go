@@ -20,6 +20,7 @@ const expected = `
   </head>
   <body>
     <main id="main">
+<h1>This is a list of all books available</h1>
 <ol>
   <li>one</li>
   <li>two</li>
@@ -33,7 +34,7 @@ const expected = `
 
 func TestTemplateEngineParsing(t *testing.T) {
 
-	te := NewTemplateEngine(os.DirFS("./").(FS))
+	te := NewTemplateEngine(os.DirFS("../ui").(FS), EngineOptions{HotReload: false})
 	assert.NoError(t, te.ParseTemplates(context.Background()))
 
 	content := &bytes.Buffer{}

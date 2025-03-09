@@ -34,7 +34,9 @@ func RegisterUI(ctx context.Context, server *http.ServeMux) error {
 		fs = staticFiles
 	}
 
-	engine := template.NewTemplateEngine(fs)
+	engine := template.NewTemplateEngine(fs, template.EngineOptions{
+		HotReload: hasExternal,
+	})
 	if err := engine.ParseTemplates(ctx); err != nil {
 		return tracing.Error(span, err)
 	}

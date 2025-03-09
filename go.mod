@@ -12,6 +12,8 @@ require (
 	go.opentelemetry.io/otel/trace v1.21.0
 )
 
+require github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
+
 require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.2.0 // indirect

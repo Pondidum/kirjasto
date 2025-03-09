@@ -7,7 +7,7 @@
 
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
-    <script src="/static/hotreload.js"></script>
+    {{- if .Engine.HotReload }}<script src="/static/hotreload.js"></script>{{ end }}
   </head>
   <body>
     <main id="main">

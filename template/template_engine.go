@@ -9,6 +9,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/go-viper/mapstructure/v2"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -22,12 +23,18 @@ type FS interface {
 
 type TemplateEngine struct {
 	source    FS
+	options   EngineOptions
 	templates map[string]*template.Template
 }
 
-func NewTemplateEngine(source FS) *TemplateEngine {
+type EngineOptions struct {
+	HotReload bool
+}
+
+func NewTemplateEngine(source FS, options EngineOptions) *TemplateEngine {
 	return &TemplateEngine{
 		source:    source,
+		options:   options,
 		templates: map[string]*template.Template{},
 	}
 }
@@ -111,6 +118,13 @@ func (te *TemplateEngine) Render(ctx context.Context, template string, data any,
 	if !found {
 		return tracing.Errorf(span, "no template called %s found", template)
 	}
+
+	fields := map[string]any{}
+	if err := mapstructure.Decode(data, &fields); err != nil {
+		return tracing.Error(span, err)
+	}
+
+	fields["Engine"] = te.options
 
 	if err := tpl.ExecuteTemplate(writer, "base", data); err != nil {
 		return tracing.Error(span, err)
