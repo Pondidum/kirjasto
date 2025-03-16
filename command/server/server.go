@@ -36,14 +36,24 @@ func (c *ServerCommand) Execute(ctx context.Context, config *config.Config, args
 	ctx, span := tr.Start(ctx, "execute")
 	defer span.End()
 
-	server := http.NewServeMux()
+	mux := http.NewServeMux()
 
-	if err := ui.RegisterUI(ctx, config, server); err != nil {
+	if err := ui.RegisterUI(ctx, config, mux); err != nil {
 		return tracing.Error(span, err)
 	}
 
-	fmt.Println("Listening on", c.address)
-	if err := http.ListenAndServe(c.address, server); err != nil {
+	server := &http.Server{
+		Addr:    c.address,
+		Handler: mux,
+	}
+
+	fmt.Println("Listening on", server.Addr)
+	go func() {
+		server.ListenAndServe()
+	}()
+	<-ctx.Done()
+
+	if err := server.Shutdown(context.Background()); err != nil {
 		return tracing.Error(span, err)
 	}
 
