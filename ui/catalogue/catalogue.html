@@ -2,9 +2,15 @@
 
 {{ define "content" }}
 <h1>This is a list of all books available</h1>
+<form method="get" action="/catalogue">
+  <input type="text" name="query" />
+  <input type="submit" value="Search" />
+</form>
 <ol>
-  <li>one</li>
-  <li>two</li>
-  <li>three</li>
+  {{- range $i, $book := .Results }}
+  <li>
+    <h3>{{ $book.Name }}</h3>
+    <p>{{ $book.Authors | join "," }}</p></li>
+  {{- end }}
 </ol>
 {{ end }}
