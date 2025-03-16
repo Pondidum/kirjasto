@@ -4,15 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/csv"
-	"fmt"
 	"io"
 	"kirjasto/config"
 	"kirjasto/storage"
 	"kirjasto/tracing"
 	"os"
-	"os/signal"
 	"strconv"
-	"syscall"
 	"time"
 
 	"github.com/spf13/pflag"
@@ -44,7 +41,6 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 	ctx, span := tr.Start(ctx, "execute")
 	defer span.End()
 
-	ctx = withCancelSignals(ctx)
 	if len(args) != 1 {
 		return tracing.Errorf(span, "this command takes one argument: source file")
 	}
@@ -104,45 +100,38 @@ func (c *ImportCommand) importFile(ctx context.Context, config *config.Config, s
 
 	for {
 
-		select {
-		case <-ctx.Done():
+		line, err := reader.Read()
+		if err == io.EOF {
+			c.send(fileImported{})
 			return nil
-
-		default:
-
-			line, err := reader.Read()
-			if err == io.EOF {
-				c.send(fileImported{})
-				return nil
-			}
-			if err != nil {
-				c.send(recordProcessed{err: err})
-				return tracing.Error(span, err)
-			}
-
-			record.Type = line[0]
-
-			record.ID = line[1]
-			if record.Revision, err = strconv.Atoi(line[2]); err != nil {
-				c.send(recordProcessed{err: err})
-				return tracing.Error(span, err)
-			}
-
-			if record.Modified, err = time.Parse("2006-01-02T15:04:05.999999", line[3]); err != nil {
-				c.send(recordProcessed{err: err})
-				return tracing.Error(span, err)
-			}
-
-			record.Data = line[4]
-
-			count, err := insert.Exec(ctx, record)
-			if err != nil {
-				c.send(recordProcessed{err: err})
-				return tracing.Error(span, err)
-			}
-
-			c.send(recordProcessed{changed: count > 0})
 		}
+		if err != nil {
+			c.send(recordProcessed{err: err})
+			return tracing.Error(span, err)
+		}
+
+		record.Type = line[0]
+
+		record.ID = line[1]
+		if record.Revision, err = strconv.Atoi(line[2]); err != nil {
+			c.send(recordProcessed{err: err})
+			return tracing.Error(span, err)
+		}
+
+		if record.Modified, err = time.Parse("2006-01-02T15:04:05.999999", line[3]); err != nil {
+			c.send(recordProcessed{err: err})
+			return tracing.Error(span, err)
+		}
+
+		record.Data = line[4]
+
+		count, err := insert.Exec(ctx, record)
+		if err != nil {
+			c.send(recordProcessed{err: err})
+			return tracing.Error(span, err)
+		}
+
+		c.send(recordProcessed{changed: count > 0})
 	}
 }
 
@@ -190,17 +179,4 @@ func (c *ImportCommand) validateFile(ctx context.Context, sourceFile string) (in
 			return 0, err
 		}
 	}
-}
-
-func withCancelSignals(ctx context.Context) context.Context {
-	ctx, cancel := context.WithCancel(ctx)
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		s := <-signals
-		fmt.Printf("\nReceived %s, stopping\n", s)
-		cancel()
-	}()
-
-	return ctx
 }

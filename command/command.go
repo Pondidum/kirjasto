@@ -7,7 +7,9 @@ import (
 	"kirjasto/config"
 	"kirjasto/tracing"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/hashicorp/cli"
 	"github.com/spf13/pflag"
@@ -44,8 +46,7 @@ func (c *command) Help() string {
 }
 
 func (c *command) Run(args []string) int {
-	ctx := context.Background()
-
+	ctx := withCancelSignals(context.Background())
 	cfg, err := config.CreateConfig(ctx)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
@@ -76,4 +77,17 @@ func (c *command) Run(args []string) int {
 	}
 
 	return 0
+}
+
+func withCancelSignals(ctx context.Context) context.Context {
+	ctx, cancel := context.WithCancel(ctx)
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		s := <-signals
+		fmt.Printf("\nReceived %s, stopping\n", s)
+		cancel()
+	}()
+
+	return ctx
 }
