@@ -1,6 +1,7 @@
 package importcmd
 
 import (
+	"bytes"
 	"context"
 	"encoding/csv"
 	"fmt"
@@ -9,11 +10,15 @@ import (
 	"kirjasto/storage"
 	"kirjasto/tracing"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/spf13/pflag"
 	"go.opentelemetry.io/otel"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 var tr = otel.Tracer("command.import")
@@ -23,6 +28,7 @@ func NewImportCommand() *ImportCommand {
 }
 
 type ImportCommand struct {
+	send func(msg tea.Msg)
 }
 
 func (c *ImportCommand) Synopsis() string {
@@ -38,15 +44,37 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 	ctx, span := tr.Start(ctx, "execute")
 	defer span.End()
 
+	ctx = withCancelSignals(ctx)
 	if len(args) != 1 {
 		return tracing.Errorf(span, "this command takes one argument: source file")
 	}
 	sourceFile := args[0]
 
-	//for now, we are assuming this is an openlibrary datadump
+	prg := tea.NewProgram(&model{})
+	c.send = prg.Send
+
+	go c.importFile(ctx, config, sourceFile)
+	if _, err := prg.Run(); err != nil {
+		return tracing.Error(span, err)
+	}
+
+	return nil
+}
+
+func (c *ImportCommand) importFile(ctx context.Context, config *config.Config, sourceFile string) error {
+	ctx, span := tr.Start(ctx, "import_file")
+	defer span.End()
+
+	lineCount, err := c.validateFile(ctx, sourceFile)
+	if err != nil {
+		c.send(recordProcessed{err: err})
+		return tracing.Error(span, err)
+	}
+	c.send(validatedFile{lineCount})
 
 	f, err := os.Open(sourceFile)
 	if err != nil {
+		c.send(recordProcessed{err: err})
 		return tracing.Error(span, err)
 	}
 	defer f.Close()
@@ -57,52 +85,122 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 
 	writer, err := storage.Writer(ctx, config.DatabaseFile)
 	if err != nil {
+		c.send(recordProcessed{err: err})
 		return tracing.Error(span, err)
 	}
 
 	if err := storage.CreateTables(ctx, writer); err != nil {
+		c.send(recordProcessed{err: err})
 		return tracing.Error(span, err)
 	}
 
-	insert, err := storage.InsertOpenLibrary(ctx, writer)
+	insert, err := importRecordCommand(ctx, writer)
 	if err != nil {
+		c.send(recordProcessed{err: err})
 		return tracing.Error(span, err)
 	}
 
-	record := storage.OpenLibraryRecord{}
+	record := OpenLibraryRecord{}
 
 	for {
-		line, err := reader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return tracing.Error(span, err)
-		}
 
-		record.Type = line[0]
+		select {
+		case <-ctx.Done():
+			return nil
 
-		if record.Type != "/type/work" && record.Type != "/type/author" {
-			return tracing.Errorf(span, "file doesn't seem to be a works or author dump")
+		default:
+
+			line, err := reader.Read()
+			if err == io.EOF {
+				c.send(fileImported{})
+				return nil
+			}
+			if err != nil {
+				c.send(recordProcessed{err: err})
+				return tracing.Error(span, err)
+			}
+
+			record.Type = line[0]
+
+			record.ID = line[1]
+			if record.Revision, err = strconv.Atoi(line[2]); err != nil {
+				c.send(recordProcessed{err: err})
+				return tracing.Error(span, err)
+			}
+
+			if record.Modified, err = time.Parse("2006-01-02T15:04:05.999999", line[3]); err != nil {
+				c.send(recordProcessed{err: err})
+				return tracing.Error(span, err)
+			}
+
+			record.Data = line[4]
+
+			count, err := insert.Exec(ctx, record)
+			if err != nil {
+				c.send(recordProcessed{err: err})
+				return tracing.Error(span, err)
+			}
+
+			c.send(recordProcessed{changed: count > 0})
 		}
+	}
+}
 
-		record.ID = line[1]
-		if record.Revision, err = strconv.Atoi(line[2]); err != nil {
-			return tracing.Error(span, err)
-		}
+func (c *ImportCommand) validateFile(ctx context.Context, sourceFile string) (int, error) {
+	ctx, span := tr.Start(ctx, "validate_file")
+	defer span.End()
 
-		if record.Modified, err = time.Parse("2006-01-02T15:04:05.999999", line[3]); err != nil {
-			return tracing.Error(span, err)
-		}
+	f, err := os.Open(sourceFile)
+	if err != nil {
+		return 0, tracing.Error(span, err)
+	}
+	defer f.Close()
 
-		record.Data = line[4]
+	reader := csv.NewReader(f)
+	reader.Comma = '\t'
+	reader.LazyQuotes = true
 
-		if err := insert.Exec(ctx, record); err != nil {
-			return tracing.Error(span, err)
-		}
-		fmt.Print(".")
+	line, err := reader.Read()
+	if err == io.EOF {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, tracing.Error(span, err)
 	}
 
-	fmt.Println("")
-	return nil
+	recordType := line[0]
+	if recordType != "/type/work" && recordType != "/type/author" {
+		return 0, tracing.Errorf(span, "file doesn't seem to be a works or author dump")
+	}
+
+	// count the lines, start at 1 as we already read one line using the csv reader
+	buf := make([]byte, 32*1024)
+	count := 1
+	lineSep := []byte{'\n'}
+
+	for {
+		c, err := f.Read(buf)
+		count += bytes.Count(buf[:c], lineSep)
+
+		switch {
+		case err == io.EOF:
+			return count, nil
+
+		case err != nil:
+			return 0, err
+		}
+	}
+}
+
+func withCancelSignals(ctx context.Context) context.Context {
+	ctx, cancel := context.WithCancel(ctx)
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		s := <-signals
+		fmt.Printf("\nReceived %s, stopping\n", s)
+		cancel()
+	}()
+
+	return ctx
 }
