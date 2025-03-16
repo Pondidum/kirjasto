@@ -38,7 +38,7 @@ func (c *ServerCommand) Execute(ctx context.Context, config *config.Config, args
 
 	server := http.NewServeMux()
 
-	if err := ui.RegisterUI(ctx, server); err != nil {
+	if err := ui.RegisterUI(ctx, config, server); err != nil {
 		return tracing.Error(span, err)
 	}
 

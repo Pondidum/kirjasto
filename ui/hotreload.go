@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"crypto/rand"
 	"fmt"
+	"kirjasto/config"
 	"kirjasto/template"
 	"kirjasto/tracing"
 	"net/http"
@@ -24,7 +25,7 @@ type hotReload struct {
 	token []byte
 }
 
-func (hr *hotReload) Register(ctx context.Context, mux *http.ServeMux, engine *template.TemplateEngine) error {
+func (hr *hotReload) Register(ctx context.Context, cfg *config.Config, mux *http.ServeMux, engine *template.TemplateEngine) error {
 
 	hr.createToken()
 

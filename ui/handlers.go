@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"io/fs"
+	"kirjasto/config"
 	"kirjasto/template"
 	"kirjasto/tracing"
 	"kirjasto/ui/catalogue"
@@ -19,12 +20,12 @@ var tr = otel.Tracer("ui")
 //go:embed */*
 var staticFiles embed.FS
 
-func RegisterUI(ctx context.Context, server *http.ServeMux) error {
+func RegisterUI(ctx context.Context, cfg *config.Config, server *http.ServeMux) error {
 	ctx, span := tr.Start(ctx, "register_handlers")
 	defer span.End()
 
 	hasExternal := hasExternalFiles()
-	handlers := []func(ctx context.Context, server *http.ServeMux, engine *template.TemplateEngine) error{}
+	handlers := []func(ctx context.Context, cfg *config.Config, server *http.ServeMux, engine *template.TemplateEngine) error{}
 
 	var fs template.FS
 
@@ -61,7 +62,7 @@ func RegisterUI(ctx context.Context, server *http.ServeMux) error {
 	handlers = append(handlers, catalogue.RegisterHandlers)
 
 	for _, handler := range handlers {
-		if err := handler(ctx, server, engine); err != nil {
+		if err := handler(ctx, cfg, server, engine); err != nil {
 			return tracing.Error(span, err)
 		}
 	}

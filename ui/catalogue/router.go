@@ -2,11 +2,13 @@ package catalogue
 
 import (
 	"context"
+	"kirjasto/config"
+	"kirjasto/storage"
 	"kirjasto/template"
 	"net/http"
 )
 
-func RegisterHandlers(ctx context.Context, mux *http.ServeMux, engine *template.TemplateEngine) error {
+func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.ServeMux, engine *template.TemplateEngine) error {
 
 	mux.HandleFunc("GET /catalogue", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")

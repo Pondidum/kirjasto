@@ -2,13 +2,14 @@ package ui
 
 import (
 	"context"
+	"kirjasto/config"
 	"kirjasto/template"
 	"net/http"
 	"path"
 )
 
-func StaticFilesHandler(fs template.FS) func(ctx context.Context, mux *http.ServeMux, engine *template.TemplateEngine) error {
-	return func(ctx context.Context, mux *http.ServeMux, engine *template.TemplateEngine) error {
+func StaticFilesHandler(fs template.FS) func(ctx context.Context, cfg *config.Config, mux *http.ServeMux, engine *template.TemplateEngine) error {
+	return func(ctx context.Context, cfg *config.Config, mux *http.ServeMux, engine *template.TemplateEngine) error {
 		mux.Handle("/static/", WithPrefix("/common", http.FileServerFS(fs)))
 		return nil
 	}
