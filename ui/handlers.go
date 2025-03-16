@@ -5,6 +5,7 @@ import (
 	"embed"
 	"io/fs"
 	"kirjasto/config"
+	"kirjasto/routing"
 	"kirjasto/template"
 	"kirjasto/tracing"
 	"kirjasto/ui/catalogue"
@@ -25,7 +26,7 @@ func RegisterUI(ctx context.Context, cfg *config.Config, server *http.ServeMux) 
 	defer span.End()
 
 	hasExternal := hasExternalFiles()
-	handlers := []func(ctx context.Context, cfg *config.Config, server *http.ServeMux, engine *template.TemplateEngine) error{}
+	handlers := []routing.Handler{}
 
 	var fs template.FS
 
