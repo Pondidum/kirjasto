@@ -126,7 +126,7 @@ func (te *TemplateEngine) Render(ctx context.Context, template string, data any,
 
 	fields["Engine"] = te.options
 
-	if err := tpl.ExecuteTemplate(writer, "base", data); err != nil {
+	if err := tpl.ExecuteTemplate(writer, "base", fields); err != nil {
 		return tracing.Error(span, err)
 	}
 	return nil
