@@ -92,7 +92,7 @@ func (te *TemplateEngine) ParseTemplates(ctx context.Context) error {
 			combined.WriteString(commonContents.String())
 			combined.Write(content)
 
-			tpl, err := template.New("main").Parse(combined.String())
+			tpl, err := template.New("main").Funcs(funcs).Parse(combined.String())
 			if err != nil {
 				return tracing.Error(span, err)
 			}
