@@ -3,6 +3,7 @@ package catalogue
 import (
 	"context"
 	"kirjasto/config"
+	"kirjasto/routing"
 	"kirjasto/storage"
 	"kirjasto/template"
 	"net/http"
@@ -10,28 +11,24 @@ import (
 
 func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.ServeMux, engine *template.TemplateEngine) error {
 
-	mux.HandleFunc("GET /catalogue", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /catalogue", routing.RouteHandler(func(w http.ResponseWriter, r *http.Request) error {
+
 		dto := map[string]any{
 			"Results": []string{},
 		}
 
 		if err := r.ParseForm(); err != nil {
-			w.Write([]byte(err.Error()))
-			w.WriteHeader(400)
+			return err
 		}
 
 		if query := r.Form.Get("query"); query != "" {
 			reader, err := storage.Reader(ctx, config.DatabaseFile)
 			if err != nil {
-				w.Write([]byte(err.Error()))
-				w.WriteHeader(500)
-				return
+				return err
 			}
 			results, err := QueryBooks(ctx, reader, 1000, query)
 			if err != nil {
-				w.Write([]byte(err.Error()))
-				w.WriteHeader(500)
-				return
+				return err
 			}
 
 			dto["Results"] = results
@@ -39,11 +36,14 @@ func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.Serv
 
 		w.Header().Set("Content-Type", "text/html")
 		if err := engine.Render(r.Context(), "catalogue/catalogue.html", dto, w); err != nil {
-			w.WriteHeader(500)
+			return err
 		}
-	})
 
-	mux.HandleFunc("GET /catalogue/book/{id}", func(w http.ResponseWriter, r *http.Request) {
+		return nil
+	}))
+
+	mux.HandleFunc("GET /catalogue/book/{id}", routing.RouteHandler(func(w http.ResponseWriter, r *http.Request) error {
+
 		id := r.PathValue("id")
 
 		dto := &Book{
@@ -52,9 +52,11 @@ func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.Serv
 
 		w.Header().Set("Content-Type", "text/html")
 		if err := engine.Render(r.Context(), "catalogue/book.html", dto, w); err != nil {
-			w.WriteHeader(500)
+			return err
 		}
-	})
+
+		return nil
+	}))
 
 	return nil
 }
