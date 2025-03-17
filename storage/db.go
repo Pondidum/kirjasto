@@ -55,19 +55,6 @@ func Reader(ctx context.Context, dbPath string) (*sql.DB, error) {
 	return db, nil
 }
 
-func CreateTables(ctx context.Context, db *sql.DB) error {
-	_, err := db.ExecContext(ctx,
-		`create table if not exists openlibrary (
-		id text not null primary key,
-		type text not null,
-		revision int,
-		modified text,
-		data blob
-	) STRICT`)
-
-	return err
-}
-
 func connectionString(filepath string) string {
 
 	conn := url.Values{}
