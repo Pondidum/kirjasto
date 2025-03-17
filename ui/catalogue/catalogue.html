@@ -10,7 +10,11 @@
   {{- range $i, $book := .Results }}
   <li>
     <h3>{{ $book.Name }}</h3>
-    <p>{{ $book.Authors | join "," }}</p></li>
+    <ul>
+      {{- range $i, $author := $book.Authors }}
+      <li>{{ $author.ID }}</li>
+      {{- end }}
+    </ul>
   {{- end }}
 </ol>
 {{ end }}

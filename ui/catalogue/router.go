@@ -22,16 +22,12 @@ func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.Serv
 		}
 
 		if query := r.Form.Get("query"); query != "" {
-			reader, err := storage.Reader(ctx, config.DatabaseFile)
-			if err != nil {
-				return err
-			}
-			results, err := QueryBooks(ctx, reader, 1000, query)
+			books, err := storage.FindBookByTitle(ctx, query)
 			if err != nil {
 				return err
 			}
 
-			dto["Results"] = results
+			dto["Results"] = books
 		}
 
 		w.Header().Set("Content-Type", "text/html")
