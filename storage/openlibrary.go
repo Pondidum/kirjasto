@@ -7,10 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"kirjasto/tracing"
-	"os"
 	"os/exec"
-	"path"
 	"regexp"
 	"strings"
 )
@@ -76,6 +73,7 @@ func FindBookByTitle(ctx context.Context, query string) ([]Book, error) {
 
 	idMatch := workIdRx.MatchString(query)
 
+	authorIds := map[string]bool{}
 	books := []Book{}
 	for {
 
@@ -110,64 +108,47 @@ func FindBookByTitle(ctx context.Context, query string) ([]Book, error) {
 		}
 
 		for _, author := range dto.Authors {
-			author, err := GetAuthor(ctx, author.Author.Key)
-			if err != nil {
-				continue
-			}
-
-			book.Authors = append(book.Authors, author)
+			authorIds[author.Author.Key] = true
+			book.Authors = append(book.Authors, Author{
+				ID: author.Author.Key,
+			})
 		}
 
 		books = append(books, book)
 	}
 
+	authors, err := GetAllAuthors(ctx, authorIds)
+	if err != nil {
+		return books, err
+	}
+
+	for _, book := range books {
+
+		ba := make([]Author, 0, len(book.Authors))
+		for _, a := range book.Authors {
+			if full, found := authors[a.ID]; found {
+				ba = append(ba, full)
+			}
+		}
+		book.Authors = ba
+	}
+
 	return books, nil
 }
 
-func GetAuthor(ctx context.Context, id string) (Author, error) {
-	ctx, span := tr.Start(ctx, "get_author")
+func GetAllAuthors(ctx context.Context, ids map[string]bool) (map[string]Author, error) {
+	ctx, span := tr.Start(ctx, "get_all_authors")
 	defer span.End()
 
-	cacheDir := ".data/cache/authors/"
-	if err := os.MkdirAll(cacheDir, os.ModePerm); err != nil {
-		return Author{}, tracing.Error(span, err)
+	args := make([]string, 0, (len(ids)*2)+2)
+	args = append(args, "--fixed-strings")
+
+	for id := range ids {
+		args = append(args, "-e", id)
 	}
+	args = append(args, ".data/openlibrary/ol_dump_authors_2025-02-11.txt")
 
-	cacheKey := path.Base(id)
-
-	if content, err := os.ReadFile(path.Join(cacheDir, cacheKey)); err == nil {
-		return authorFromJson(content)
-	}
-
-	content, err := GetAuthorUncached(ctx, id)
-	if err != nil {
-		return Author{}, err
-	}
-
-	if err := os.WriteFile(path.Join(cacheDir, cacheKey), content, 0666); err != nil {
-		span.RecordError(err)
-	}
-
-	return authorFromJson(content)
-
-}
-
-func authorFromJson(content []byte) (Author, error) {
-	dto := authorDto{}
-	if err := json.Unmarshal(content, &dto); err != nil {
-		return Author{}, fmt.Errorf("error parsing %w\n%s", err, string(content))
-	}
-
-	return Author{
-		ID:   dto.Key,
-		Name: dto.Name,
-	}, nil
-}
-
-func GetAuthorUncached(ctx context.Context, id string) ([]byte, error) {
-
-	query := fmt.Sprintf("\t%s\t", id)
-	cmd := exec.Command("rg", "--fixed-strings", query, ".data/openlibrary/ol_dump_authors_2025-02-11.txt")
+	cmd := exec.Command("rg", args...)
 
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -183,14 +164,34 @@ func GetAuthorUncached(ctx context.Context, id string) ([]byte, error) {
 	reader.Comma = '\t'
 	reader.LazyQuotes = true
 
-	line, err := reader.Read()
-	if err == io.EOF {
-		return nil, fmt.Errorf("no author found with id %s", id)
+	authors := make(map[string]Author, len(ids))
+	for {
+		line, err := reader.Read()
+		if err == io.EOF {
+			return authors, nil
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		author, err := authorFromJson([]byte(line[fieldJson]))
+		if err != nil {
+			span.RecordError(err)
+			continue
+		}
+
+		authors[author.ID] = author
 	}
-	if err != nil {
-		return nil, err
+}
+
+func authorFromJson(content []byte) (Author, error) {
+	dto := authorDto{}
+	if err := json.Unmarshal(content, &dto); err != nil {
+		return Author{}, fmt.Errorf("error parsing %w\n%s", err, string(content))
 	}
 
-	return []byte(line[fieldJson]), nil
-
+	return Author{
+		ID:   dto.Key,
+		Name: dto.Name,
+	}, nil
 }
