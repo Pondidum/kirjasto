@@ -42,8 +42,8 @@ func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.Serv
 
 		id := r.PathValue("id")
 
-		dto := &Book{
-			BookId: id,
+		dto := &storage.Book{
+			ID: id,
 		}
 
 		w.Header().Set("Content-Type", "text/html")

@@ -12,7 +12,7 @@
     <h3>{{ $book.Name }}</h3>
     <ul>
       {{- range $i, $author := $book.Authors }}
-      <li>{{ $author.ID }}</li>
+      <li><a href="{{ $author.ID }}">{{ $author.Name }}</a></li>
       {{- end }}
     </ul>
   {{- end }}
