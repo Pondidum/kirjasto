@@ -1,0 +1,12 @@
+{{- define "radio" }}
+<div>
+  <input
+    type="radio"
+    id="{{ .Value }}"
+    name="{{ .Group }}"
+    value="{{ .Value }}"
+    {{ ternary (eq .CurrentValue .Value) "checked" }}
+  />
+  <label for="{{ .Value }}">{{ or .Label .Value }}</label>
+</div>
+{{- end }}
