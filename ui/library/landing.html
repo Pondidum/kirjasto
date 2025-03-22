@@ -1,0 +1,41 @@
+{{ define "title" }}My Library{{ end }}
+
+{{ define "content" }}
+<h1>Library</h1>
+<form>
+  <input type="text" name="filter"  value="{{ .Filter.Filter }}"/>
+
+  <fieldset>
+    <legend>Book Type</legend>
+    {{ template "radio" dict "Group" "type" "CurrentValue" .Filter.Type  "Value" "digital" }}
+    {{ template "radio" dict "Group" "type" "CurrentValue" .Filter.Type  "Value" "physical" }}
+    {{ template "radio" dict "Group" "type" "CurrentValue" .Filter.Type  "Value" "unknown" }}
+    {{ template "radio" dict "Group" "type" "CurrentValue" .Filter.Type  "Value" "all" }}
+  </fieldset>
+
+  <fieldset>
+    <legend>Ownership</legend>
+    {{ template "radio" dict "Group" "ownership" "CurrentValue" .Filter.Ownership  "Value" "owned" }}
+    {{ template "radio" dict "Group" "ownership" "CurrentValue" .Filter.Ownership  "Value" "wanted" }}
+    {{ template "radio" dict "Group" "ownership" "CurrentValue" .Filter.Ownership  "Value" "all" }}
+  </fieldset>
+
+  <fieldset>
+    <legend>Progress</legend>
+    {{ template "radio" dict "Group" "progress" "CurrentValue" .Filter.Progress  "Value" "unread" }}
+    {{ template "radio" dict "Group" "progress" "CurrentValue" .Filter.Progress  "Value" "reading" }}
+    {{ template "radio" dict "Group" "progress" "CurrentValue" .Filter.Progress  "Value" "read" }}
+    {{ template "radio" dict "Group" "progress" "CurrentValue" .Filter.Progress  "Value" "all" }}
+  </fieldset>
+
+  <input type="submit" value="Filter" />
+</form>
+
+<ol>
+  {{- range $i, $book := .Books }}
+  <li>
+    <h3>{{ $book.Name }}</h3>
+  </li>
+  {{- end }}
+</ol>
+{{- end }}

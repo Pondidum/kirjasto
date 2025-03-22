@@ -9,6 +9,7 @@ import (
 	"kirjasto/template"
 	"kirjasto/tracing"
 	"kirjasto/ui/catalogue"
+	"kirjasto/ui/library"
 	"net/http"
 	"os"
 	"path"
@@ -60,7 +61,10 @@ func RegisterUI(ctx context.Context, cfg *config.Config, server *http.ServeMux) 
 	handlers = append(handlers, StaticFilesHandler(fs))
 
 	// app areas
-	handlers = append(handlers, catalogue.RegisterHandlers)
+	handlers = append(handlers,
+		library.RegisterHandlers,
+		catalogue.RegisterHandlers,
+	)
 
 	for _, handler := range handlers {
 		if err := handler(ctx, cfg, server, engine); err != nil {
