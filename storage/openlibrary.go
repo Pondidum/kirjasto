@@ -7,9 +7,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"kirjasto/tracing"
 	"os/exec"
 	"regexp"
 	"strings"
+
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type Author struct {
@@ -55,6 +58,11 @@ const (
 var workIdRx = regexp.MustCompile(`^OL\d*W$`)
 
 func FindBookByTitle(ctx context.Context, query string) ([]Book, error) {
+	ctx, span := tr.Start(ctx, "find_book_by_title")
+	defer span.End()
+
+	span.SetAttributes(attribute.String("query", query))
+
 	cmd := exec.Command("rg", "--fixed-strings", query, ".data/openlibrary/ol_dump_works_2025-02-11.txt")
 
 	stdout := &bytes.Buffer{}
@@ -63,8 +71,16 @@ func FindBookByTitle(ctx context.Context, query string) ([]Book, error) {
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf(stderr.String(), err)
+	err := cmd.Run()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			if exitErr.ExitCode() == 1 {
+				span.SetAttributes(attribute.Int("search.results_count", 0))
+				return []Book{}, nil
+			}
+		}
+
+		return nil, tracing.Errorf(span, "err: %w\nstdout:%s\nstderr:%s", err, stdout.String(), stderr.String())
 	}
 
 	reader := csv.NewReader(stdout)
@@ -82,12 +98,12 @@ func FindBookByTitle(ctx context.Context, query string) ([]Book, error) {
 			break
 		}
 		if err != nil {
-			return nil, err
+			return nil, tracing.Error(span, err)
 		}
 
 		dto := bookDto{}
 		if err := json.Unmarshal([]byte(line[fieldJson]), &dto); err != nil {
-			return nil, fmt.Errorf("error parsing %s: %w", line[fieldId], err)
+			return nil, tracing.Errorf(span, "error parsing %s: %w", line[fieldId], err)
 		}
 
 		// double check it was a title match
@@ -117,9 +133,11 @@ func FindBookByTitle(ctx context.Context, query string) ([]Book, error) {
 		books = append(books, book)
 	}
 
+	span.SetAttributes(attribute.Int("search.results_count", len(books)))
+
 	authors, err := GetAllAuthors(ctx, authorIds)
 	if err != nil {
-		return books, err
+		return books, tracing.Error(span, err)
 	}
 
 	for _, book := range books {
