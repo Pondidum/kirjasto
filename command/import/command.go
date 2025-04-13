@@ -3,9 +3,6 @@ package importcmd
 import (
 	"context"
 	"database/sql"
-	"encoding/csv"
-	"encoding/json"
-	"io"
 	"kirjasto/config"
 	"kirjasto/storage"
 	"kirjasto/tracing"
@@ -49,8 +46,8 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		return tracing.Error(span, err)
 	}
 
+	//add this opt if using the debugger tea.WithInput(nil)
 	prg := tea.NewProgram(&model{})
-	// c.send = prg.Send
 
 	go c.importAuthors(ctx, db, prg.Send)
 	if _, err := prg.Run(); err != nil {
@@ -78,55 +75,22 @@ func (c *ImportCommand) importAuthors(ctx context.Context, db *sql.DB, notify fu
 	}
 	defer f.Close()
 
-	reader := csv.NewReader(f)
-	reader.Comma = '\t'
-	reader.LazyQuotes = true
-	for {
-
-		line, err := reader.Read()
-		if err == io.EOF {
-			notify(fileImported{})
-			break
-		}
+	for author, err := range Authors(f) {
 		if err != nil {
 			notify(recordProcessed{err: err})
 			return tracing.Error(span, err)
 		}
 
-		id := line[fieldId]
-		dto := authorDto{}
-
-		if err := json.Unmarshal([]byte(line[fieldJson]), &dto); err != nil {
-			notify(recordProcessed{err: err})
-			return tracing.Errorf(span, "error parsing %s: %w", line[fieldId], err)
-		}
-
-		count, err := importAuthor(ctx, id, dto)
+		count, err := importAuthor(ctx, *author)
 		if err != nil {
+			notify(recordProcessed{err: err})
 			return tracing.Error(span, err)
 		}
 
 		notify(recordProcessed{changed: count > 0})
 	}
 
+	notify(fileImported{})
+
 	return nil
 }
-
-type authorDto struct {
-	Created struct {
-		Value string
-	} `json:"created"`
-	Modified struct {
-		Value string
-	} `json:"last_modified"`
-	Revision int
-	Name     string
-}
-
-const (
-	fieldType = iota
-	fieldId
-	fieldVersion
-	fieldModified
-	fieldJson
-)

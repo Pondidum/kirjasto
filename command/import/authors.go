@@ -29,14 +29,14 @@ create table if not exists authors (
 	return nil
 }
 
-type importAuthor = func(ctx context.Context, id string, author authorDto) (int64, error)
+type importAuthor = func(ctx context.Context, author authorDto) (int64, error)
 type closer = func() error
 
 func importAuthorCommand(ctx context.Context, writer *sql.DB) (importAuthor, closer, error) {
 	statement, err := writer.PrepareContext(ctx, `
 		insert into
 			authors (id, created, modified, revision, name)
-			values  (@id, @created, @modified, @revision, @name);
+			values  (@id, @created, @modified, @revision, @name)
 		on conflict(id) do update set
 			created  = excluded.created,
 			modified = excluded.modified,
@@ -54,10 +54,10 @@ func importAuthorCommand(ctx context.Context, writer *sql.DB) (importAuthor, clo
 		return nil, nil, err
 	}
 
-	insert := func(ctx context.Context, id string, author authorDto) (int64, error) {
+	insert := func(ctx context.Context, author authorDto) (int64, error) {
 		result, err := statement.ExecContext(
 			ctx,
-			sql.Named("id", id),
+			sql.Named("id", author.Key),
 			sql.Named("created", author.Created.Value),
 			sql.Named("modified", author.Modified.Value),
 			sql.Named("revision", author.Revision),
