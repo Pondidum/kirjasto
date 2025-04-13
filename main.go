@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"kirjasto/command"
+	importcmd "kirjasto/command/import"
 	"kirjasto/command/server"
 	"kirjasto/command/version"
 	"os"
@@ -15,6 +16,7 @@ func main() {
 	commands := map[string]cli.CommandFactory{
 		"version": command.NewCommand(version.NewVersionCommand()),
 		"server":  command.NewCommand(server.NewServerCommand()),
+		"import":  command.NewCommand(importcmd.NewImportCommand()),
 	}
 
 	cli := &cli.CLI{
