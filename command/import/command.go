@@ -2,9 +2,9 @@ package importcmd
 
 import (
 	"context"
+	"database/sql"
 	"encoding/csv"
 	"encoding/json"
-	"fmt"
 	"io"
 	"kirjasto/config"
 	"kirjasto/storage"
@@ -13,6 +13,8 @@ import (
 
 	"github.com/spf13/pflag"
 	"go.opentelemetry.io/otel"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 var tr = otel.Tracer("command.import")
@@ -47,19 +49,35 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		return tracing.Error(span, err)
 	}
 
+	prg := tea.NewProgram(&model{})
+	// c.send = prg.Send
+
+	go c.importAuthors(ctx, db, prg.Send)
+	if _, err := prg.Run(); err != nil {
+		return tracing.Error(span, err)
+	}
+
+	return nil
+}
+
+func (c *ImportCommand) importAuthors(ctx context.Context, db *sql.DB, notify func(msg tea.Msg)) error {
+	ctx, span := tr.Start(ctx, "import_authors")
+	defer span.End()
+
 	importAuthor, close, err := importAuthorCommand(ctx, db)
 	if err != nil {
+		notify(recordProcessed{err: err})
 		return tracing.Error(span, err)
 	}
 	defer close()
 
-	f, err := os.Open(".data/openlibrary/ol_dump_works_2025-02-11.txt")
+	f, err := os.Open(".data/openlibrary/ol_dump_authors_2025-02-11.txt")
 	if err != nil {
+		notify(recordProcessed{err: err})
 		return tracing.Error(span, err)
 	}
 	defer f.Close()
 
-	fmt.Println("")
 	reader := csv.NewReader(f)
 	reader.Comma = '\t'
 	reader.LazyQuotes = true
@@ -67,9 +85,11 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 
 		line, err := reader.Read()
 		if err == io.EOF {
+			notify(fileImported{})
 			break
 		}
 		if err != nil {
+			notify(recordProcessed{err: err})
 			return tracing.Error(span, err)
 		}
 
@@ -77,16 +97,17 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		dto := authorDto{}
 
 		if err := json.Unmarshal([]byte(line[fieldJson]), &dto); err != nil {
+			notify(recordProcessed{err: err})
 			return tracing.Errorf(span, "error parsing %s: %w", line[fieldId], err)
 		}
 
-		if err := importAuthor(ctx, id, dto); err != nil {
+		count, err := importAuthor(ctx, id, dto)
+		if err != nil {
 			return tracing.Error(span, err)
 		}
-		fmt.Print(".")
+
+		notify(recordProcessed{changed: count > 0})
 	}
-	fmt.Println("")
-	fmt.Println("Done")
 
 	return nil
 }

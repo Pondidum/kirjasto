@@ -29,7 +29,7 @@ create table if not exists authors (
 	return nil
 }
 
-type importAuthor = func(ctx context.Context, id string, author authorDto) error
+type importAuthor = func(ctx context.Context, id string, author authorDto) (int64, error)
 type closer = func() error
 
 func importAuthorCommand(ctx context.Context, writer *sql.DB) (importAuthor, closer, error) {
@@ -54,8 +54,8 @@ func importAuthorCommand(ctx context.Context, writer *sql.DB) (importAuthor, clo
 		return nil, nil, err
 	}
 
-	insert := func(ctx context.Context, id string, author authorDto) error {
-		_, err := statement.ExecContext(
+	insert := func(ctx context.Context, id string, author authorDto) (int64, error) {
+		result, err := statement.ExecContext(
 			ctx,
 			sql.Named("id", id),
 			sql.Named("created", author.Created.Value),
@@ -63,7 +63,10 @@ func importAuthorCommand(ctx context.Context, writer *sql.DB) (importAuthor, clo
 			sql.Named("revision", author.Revision),
 			sql.Named("name", author.Name),
 		)
-		return err
+		if err != nil {
+			return 0, err
+		}
+		return result.RowsAffected()
 	}
 
 	return insert, statement.Close, nil
