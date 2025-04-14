@@ -14,11 +14,11 @@ create virtual table if not exists authors_fts using fts5 (
 );
 
 create table if not exists authors (
-	id string primary key,
+	id text primary key,
 	created timestamp,
 	modified timestamp,
 	revision integer,
-	name string
+	name text
 );
 `
 

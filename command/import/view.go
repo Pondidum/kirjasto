@@ -15,7 +15,6 @@ type fileImported struct {
 }
 
 type model struct {
-	err       error
 	updated   int
 	processed int
 }
@@ -34,8 +33,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case recordProcessed:
 		if msg.err != nil {
-			m.err = msg.err
-			return m, tea.Quit
+			return m, tea.Sequence(tea.Println(msg.err.Error()), tea.Quit)
 		}
 		if msg.changed {
 			m.updated++

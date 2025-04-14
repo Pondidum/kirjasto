@@ -46,10 +46,14 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		return tracing.Error(span, err)
 	}
 
+	if err := WorksTables(ctx, db); err != nil {
+		return tracing.Error(span, err)
+	}
+
 	//add this opt if using the debugger tea.WithInput(nil)
 	prg := tea.NewProgram(&model{})
 
-	go c.importAuthors(ctx, db, prg.Send)
+	go c.importWorks(ctx, db, prg.Send)
 	if _, err := prg.Run(); err != nil {
 		return tracing.Error(span, err)
 	}
@@ -88,6 +92,45 @@ func (c *ImportCommand) importAuthors(ctx context.Context, db *sql.DB, notify fu
 		}
 
 		notify(recordProcessed{changed: count > 0})
+	}
+
+	notify(fileImported{})
+
+	return nil
+}
+
+func (c *ImportCommand) importWorks(ctx context.Context, db *sql.DB, notify func(msg tea.Msg)) error {
+	ctx, span := tr.Start(ctx, "import_works")
+	defer span.End()
+
+	importWork, close, err := importWorkCommand(ctx, db)
+	if err != nil {
+		notify(recordProcessed{err: err})
+		return tracing.Error(span, err)
+	}
+	defer close()
+
+	f, err := os.Open(".data/openlibrary/ol_dump_works_2025-02-11.txt")
+	if err != nil {
+		notify(recordProcessed{err: err})
+		return tracing.Error(span, err)
+	}
+	defer f.Close()
+
+	for work, err := range Works(f) {
+		if err != nil {
+			notify(recordProcessed{err: err})
+			return tracing.Error(span, err)
+		}
+
+		count, err := importWork(ctx, *work)
+		if err != nil {
+			notify(recordProcessed{err: err})
+			return tracing.Error(span, err)
+		}
+
+		notify(recordProcessed{changed: count > 0})
+		break
 	}
 
 	notify(fileImported{})

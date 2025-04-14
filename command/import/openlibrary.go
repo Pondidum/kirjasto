@@ -3,6 +3,7 @@ package importcmd
 import (
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"iter"
@@ -10,6 +11,10 @@ import (
 
 func Authors(r io.Reader) iter.Seq2[*authorDto, error] {
 	return iterateFile[authorDto](r)
+}
+
+func Works(r io.Reader) iter.Seq2[*workDto, error] {
+	return iterateFile[workDto](r)
 }
 
 func iterateFile[T any](r io.Reader) iter.Seq2[*T, error] {
@@ -46,7 +51,7 @@ func iterateFile[T any](r io.Reader) iter.Seq2[*T, error] {
 	}
 }
 
-type authorDto struct {
+type Record struct {
 	Key     string
 	Created struct {
 		Value string
@@ -55,7 +60,46 @@ type authorDto struct {
 		Value string
 	} `json:"last_modified"`
 	Revision int
-	Name     string
+}
+
+type workDto struct {
+	Record
+	Title   string
+	Covers  []int
+	Authors []authorLink
+}
+
+type authorLink struct {
+	//type
+	Key string
+}
+
+func (al *authorLink) UnmarshalJSON(data []byte) error {
+
+	normal := &struct {
+		Author struct{ Key string }
+	}{}
+
+	if err := json.Unmarshal(data, normal); err == nil {
+		al.Key = normal.Author.Key
+		return nil
+	}
+
+	stringBased := &struct {
+		Author string
+	}{}
+
+	if err := json.Unmarshal(data, stringBased); err == nil {
+		al.Key = stringBased.Author
+		return nil
+	}
+
+	return errors.New("unable to parse the authors")
+}
+
+type authorDto struct {
+	Record
+	Name string
 }
 
 const (
