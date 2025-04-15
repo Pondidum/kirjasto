@@ -3,10 +3,13 @@ package importcmd
 import (
 	"context"
 	"database/sql"
+	"io"
 	"kirjasto/config"
 	"kirjasto/storage"
 	"kirjasto/tracing"
 	"os"
+	"path"
+	"strings"
 
 	"github.com/spf13/pflag"
 	"go.opentelemetry.io/otel"
@@ -36,6 +39,16 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 	ctx, span := tr.Start(ctx, "execute")
 	defer span.End()
 
+	if len(args) != 1 {
+		return tracing.Errorf(span, "this command takes exactly 1 argument: a path to import")
+	}
+	filePath := args[0]
+
+	fileType, err := c.detectFileType(ctx, filePath)
+	if err != nil {
+		return tracing.Error(span, err)
+	}
+
 	db, err := storage.Writer(ctx, "fts.sqlite")
 	if err != nil {
 		return tracing.Error(span, err)
@@ -50,10 +63,24 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		return tracing.Error(span, err)
 	}
 
+	file, err := os.Open(filePath)
+	if err != nil {
+		return tracing.Error(span, err)
+	}
+	defer file.Close()
+
 	//add this opt if using the debugger tea.WithInput(nil)
 	prg := tea.NewProgram(&model{})
 
-	go c.importWorks(ctx, db, prg.Send)
+	switch fileType {
+	case "works":
+		go c.importWorks(ctx, db, file, prg.Send)
+	case "authors":
+		go c.importAuthors(ctx, db, file, prg.Send)
+	default:
+		return tracing.Errorf(span, "only 'work' and 'author' records are supported, received '%s'", fileType)
+	}
+
 	if _, err := prg.Run(); err != nil {
 		return tracing.Error(span, err)
 	}
@@ -61,25 +88,40 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 	return nil
 }
 
-func (c *ImportCommand) importAuthors(ctx context.Context, db *sql.DB, notify func(msg tea.Msg)) error {
+func (c *ImportCommand) detectFileType(ctx context.Context, filePath string) (string, error) {
+	ctx, span := tr.Start(ctx, "detect_file_type")
+	defer span.End()
+
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", tracing.Error(span, err)
+	}
+	defer file.Close()
+
+	iterator := iterateFile[Record](file)
+
+	for record, err := range iterator {
+		if err != nil {
+			return "", tracing.Error(span, err)
+		}
+		return strings.Trim(path.Dir(record.Key), "/"), nil
+	}
+
+	return "", tracing.Errorf(span, "no records found in file")
+}
+
+func (c *ImportCommand) importAuthors(ctx context.Context, db *sql.DB, reader io.Reader, notify func(msg tea.Msg)) error {
 	ctx, span := tr.Start(ctx, "import_authors")
 	defer span.End()
 
-	importAuthor, close, err := importAuthorCommand(ctx, db)
-	if err != nil {
-		notify(recordProcessed{err: err})
-		return tracing.Error(span, err)
-	}
-	defer close()
-
-	f, err := os.Open(".data/openlibrary/ol_dump_authors_2025-02-11.txt")
+	importAuthor, err := importAuthorCommand(db)
 	if err != nil {
 		notify(recordProcessed{err: err})
 		return tracing.Error(span, err)
 	}
 	defer f.Close()
 
-	for author, err := range Authors(f) {
+	for author, err := range Authors(reader) {
 		if err != nil {
 			notify(recordProcessed{err: err})
 			return tracing.Error(span, err)
@@ -99,7 +141,7 @@ func (c *ImportCommand) importAuthors(ctx context.Context, db *sql.DB, notify fu
 	return nil
 }
 
-func (c *ImportCommand) importWorks(ctx context.Context, db *sql.DB, notify func(msg tea.Msg)) error {
+func (c *ImportCommand) importWorks(ctx context.Context, db *sql.DB, reader io.Reader, notify func(msg tea.Msg)) error {
 	ctx, span := tr.Start(ctx, "import_works")
 	defer span.End()
 
@@ -117,7 +159,7 @@ func (c *ImportCommand) importWorks(ctx context.Context, db *sql.DB, notify func
 	}
 	defer f.Close()
 
-	for work, err := range Works(f) {
+	for work, err := range Works(reader) {
 		if err != nil {
 			notify(recordProcessed{err: err})
 			return tracing.Error(span, err)
