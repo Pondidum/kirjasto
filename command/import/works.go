@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 )
 
 func WorksTables(ctx context.Context, writer *sql.DB) error {
@@ -40,10 +41,9 @@ create table if not exists work_authors (
 
 type importWork = func(ctx context.Context, work workDto) (int64, error)
 
-func importWorkCommand(ctx context.Context, writer *sql.DB) (importWork, closer, error) {
-	statement, err := writer.PrepareContext(ctx, `
-		select @id, @created, @modified, @revision, @title, @covers, @authors;
+func importWorkCommand(writer *sql.DB) (importWork, error) {
 
+	works := `
 		insert into
 			works (id, created, modified, revision, title, covers)
 			values  (@id, @created, @modified, @revision, @title, @covers)
@@ -54,23 +54,24 @@ func importWorkCommand(ctx context.Context, writer *sql.DB) (importWork, closer,
 			title    = excluded.title,
 			covers   = excluded.covers
 		where excluded.revision > works.revision;
+	`
 
-		insert into
-			works_fts (id, title)
-			values 			(@id, @title)
-		on conflict(id) do update set
-			title = excluded.title;
+	fts := `
+		insert or replace into works_fts(id, title)
+		select @id, @title
+		where not exists (select * from works_fts where id = @id)
+	`
 
+	clearLinks := `
 		delete from work_authors
 		where work_id = @id;
+	`
 
+	addLinks := `
 		insert into work_authors (work_id, author_id)
-		select @id, json_extract(value, '$.author.key')
+		select @id, json_extract(value, '$.key')
 		from json_each (@authors);
-	`)
-	if err != nil {
-		return nil, nil, err
-	}
+	`
 
 	insert := func(ctx context.Context, work workDto) (int64, error) {
 		covers, err := json.Marshal(work.Covers)
@@ -82,22 +83,46 @@ func importWorkCommand(ctx context.Context, writer *sql.DB) (importWork, closer,
 		if err != nil {
 			return 0, err
 		}
+		fmt.Println(string(authors))
 
-		result, err := statement.ExecContext(
-			ctx,
-			sql.Named("id", work.Key),
+		id := sql.Named("id", work.Key)
+		title := sql.Named("title", work.Title)
+
+		result, err := writer.ExecContext(ctx, works,
+			id,
 			sql.Named("created", work.Created.Value),
 			sql.Named("modified", work.Modified.Value),
 			sql.Named("revision", work.Revision),
-			sql.Named("title", work.Title),
-			sql.Named("covers", covers),
-			sql.Named("authors", authors),
+			title,
+			covers,
 		)
 		if err != nil {
 			return 0, err
 		}
+
+		_, err = writer.ExecContext(ctx, fts,
+			id,
+			title,
+		)
+		if err != nil {
+			return 0, err
+		}
+
+		_, err = writer.ExecContext(ctx, clearLinks, id)
+		if err != nil {
+			return 0, err
+		}
+
+		_, err = writer.ExecContext(ctx, addLinks,
+			id,
+			authors,
+		)
+		if err != nil {
+			return 0, err
+		}
+
 		return result.RowsAffected()
 	}
 
-	return insert, statement.Close, nil
+	return insert, nil
 }

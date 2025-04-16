@@ -71,7 +71,7 @@ type workDto struct {
 
 type authorLink struct {
 	//type
-	Key string
+	Key string `json:"key"`
 }
 
 func (al *authorLink) UnmarshalJSON(data []byte) error {

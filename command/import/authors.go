@@ -30,10 +30,9 @@ create table if not exists authors (
 }
 
 type importAuthor = func(ctx context.Context, author authorDto) (int64, error)
-type closer = func() error
 
-func importAuthorCommand(ctx context.Context, writer *sql.DB) (importAuthor, closer, error) {
-	statement, err := writer.PrepareContext(ctx, `
+func importAuthorCommand(writer *sql.DB) (importAuthor, error) {
+	authors := `
 		insert into
 			authors (id, created, modified, revision, name)
 			values  (@id, @created, @modified, @revision, @name)
@@ -43,31 +42,38 @@ func importAuthorCommand(ctx context.Context, writer *sql.DB) (importAuthor, clo
 			revision = excluded.revision,
 			name    = excluded.name
 		where excluded.revision > authors.revision;
-
-		insert into
-			authors_fts (id, name)
-			values 			(@id, @name)
-		on conflict(id) do update set
-			name = excluded.name;
-	`)
-	if err != nil {
-		return nil, nil, err
-	}
+`
+	fts := `
+		insert or replace into authors_fts(id, name)
+		select @id, @name
+		where not exists (select * from authors_fts where id = @id)
+	`
 
 	insert := func(ctx context.Context, author authorDto) (int64, error) {
-		result, err := statement.ExecContext(
-			ctx,
-			sql.Named("id", author.Key),
+		id := sql.Named("id", author.Key)
+		name := sql.Named("name", author.Name)
+
+		result, err := writer.ExecContext(ctx, authors,
+			id,
 			sql.Named("created", author.Created.Value),
 			sql.Named("modified", author.Modified.Value),
 			sql.Named("revision", author.Revision),
-			sql.Named("name", author.Name),
+			name,
 		)
 		if err != nil {
 			return 0, err
 		}
+
+		_, err = writer.ExecContext(ctx, fts,
+			id,
+			name,
+		)
+		if err != nil {
+			return 0, err
+		}
+
 		return result.RowsAffected()
 	}
 
-	return insert, statement.Close, nil
+	return insert, nil
 }

@@ -119,7 +119,6 @@ func (c *ImportCommand) importAuthors(ctx context.Context, db *sql.DB, reader io
 		notify(recordProcessed{err: err})
 		return tracing.Error(span, err)
 	}
-	defer f.Close()
 
 	for author, err := range Authors(reader) {
 		if err != nil {
@@ -145,19 +144,11 @@ func (c *ImportCommand) importWorks(ctx context.Context, db *sql.DB, reader io.R
 	ctx, span := tr.Start(ctx, "import_works")
 	defer span.End()
 
-	importWork, close, err := importWorkCommand(ctx, db)
+	importWork, err := importWorkCommand(db)
 	if err != nil {
 		notify(recordProcessed{err: err})
 		return tracing.Error(span, err)
 	}
-	defer close()
-
-	f, err := os.Open(".data/openlibrary/ol_dump_works_2025-02-11.txt")
-	if err != nil {
-		notify(recordProcessed{err: err})
-		return tracing.Error(span, err)
-	}
-	defer f.Close()
 
 	for work, err := range Works(reader) {
 		if err != nil {
