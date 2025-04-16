@@ -114,11 +114,12 @@ func (c *ImportCommand) importAuthors(ctx context.Context, db *sql.DB, reader io
 	ctx, span := tr.Start(ctx, "import_authors")
 	defer span.End()
 
-	importAuthor, err := importAuthorCommand(db)
+	importAuthor, close, err := importAuthorCommand(db)
 	if err != nil {
 		notify(recordProcessed{err: err})
 		return tracing.Error(span, err)
 	}
+	defer close()
 
 	for author, err := range Authors(reader) {
 		if err != nil {
