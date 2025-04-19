@@ -32,7 +32,7 @@ create table if not exists authors (
 type importAuthor = func(ctx context.Context, author authorDto) (int64, error)
 type closer = func()
 
-func importAuthorCommand(writer *sql.DB) (importAuthor, closer, error) {
+func importAuthorCommand(writer *sql.Tx) (importAuthor, closer, error) {
 
 	authors, err := writer.Prepare(`
 		insert into
@@ -44,15 +44,6 @@ func importAuthorCommand(writer *sql.DB) (importAuthor, closer, error) {
 			revision = excluded.revision,
 			name    = excluded.name
 		where excluded.revision > authors.revision;
-	`)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	fts, err := writer.Prepare(`
-		insert or replace into authors_fts(id, name)
-		select @id, @name
-		where not exists (select * from authors_fts where id = @id)
 	`)
 	if err != nil {
 		return nil, nil, err
@@ -74,19 +65,25 @@ func importAuthorCommand(writer *sql.DB) (importAuthor, closer, error) {
 			return 0, err
 		}
 
-		_, err = fts.ExecContext(ctx,
-			id,
-			name,
-		)
-		if err != nil {
-			return 0, err
-		}
-
 		return result.RowsAffected()
 	}
 
 	return insert, func() {
-		fts.Close()
+		// fts.Close()
 		authors.Close()
 	}, nil
+}
+
+func createAuthorIndexes(ctx context.Context, writer *sql.Tx) error {
+	_, err := writer.ExecContext(ctx, `
+		delete from authors_fts;
+
+		insert into authors_fts(id, name)
+		select id, name
+		from authors
+	`)
+	if err != nil {
+		return err
+	}
+	return nil
 }

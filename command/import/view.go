@@ -1,22 +1,35 @@
 package importcmd
 
 import (
-	"fmt"
-
+	"github.com/charmbracelet/bubbles/progress"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 )
+
+type fileInfo struct {
+	Type        string
+	RecordCount int
+}
+
+type fileVerified struct {
+	recordCount int
+}
 
 type recordProcessed struct {
 	changed bool
 	err     error
 }
 
+type ftsCreationStarted struct{}
 type fileImported struct {
 }
 
 type model struct {
-	updated   int
-	processed int
+	fileType string
+	total    int
+	updated  float64
+	records  progress.Model
+	fts      spinner.Model
 }
 
 func (m *model) Init() tea.Cmd {
@@ -31,27 +44,35 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		}
 
+	case fileInfo:
+		m.total = msg.RecordCount
+		m.fileType = msg.Type
+
 	case recordProcessed:
-		if msg.err != nil {
-			return m, tea.Sequence(tea.Println(msg.err.Error()), tea.Quit)
-		}
-		if msg.changed {
-			m.updated++
-		}
-		m.processed++
+		m.updated++
+		// m.records.SetPercent()
 
 	case fileImported:
 		return m, tea.Quit
 
+	case ftsCreationStarted:
+		m.fts.Tick()
+		return m, m.fts.Tick
+
+	default:
+		var cmd tea.Cmd
+		m.fts, cmd = m.fts.Update(msg)
+		return m, cmd
 	}
 
 	return m, nil
 }
 
 func (m *model) View() string {
-	if m.processed == 0 {
-		return "validating file...\n"
+
+	if m.updated >= float64(m.total) {
+		return m.fts.View() + " Creating FTS indexes"
 	}
 
-	return fmt.Sprintf("validating file...Done\n\nProcessed: %v\nChanged: %v\n", m.processed, m.updated)
+	return m.records.ViewAs(m.updated / float64(m.total))
 }
