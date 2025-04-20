@@ -23,12 +23,20 @@ func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.Serv
 			"Results": []string{},
 		}
 
-		if err := r.ParseForm(); err != nil {
+		form, err := routing.Form(r)
+		if err != nil {
+			return err
+		}
+		dto["QueryParams"] = form
+
+		reader, err := storage.Reader(ctx, config.DatabaseFile)
+		if err != nil {
 			return err
 		}
 
-		if query := r.Form.Get("query"); query != "" {
-			books, err := storage.FindBookByTitle(ctx, query)
+		if query, found := form["query"]; found {
+
+			books, err := storage.FindBookByTitle(ctx, reader, query)
 			if err != nil {
 				return err
 			}
