@@ -30,7 +30,7 @@ create table if not exists authors (
 }
 
 type importAuthor = func(ctx context.Context, author authorDto) (int64, error)
-type closer = func()
+type closer = func() error
 
 func importAuthorCommand(writer *sql.Tx) (importAuthor, closer, error) {
 
@@ -68,10 +68,7 @@ func importAuthorCommand(writer *sql.Tx) (importAuthor, closer, error) {
 		return result.RowsAffected()
 	}
 
-	return insert, func() {
-		// fts.Close()
-		authors.Close()
-	}, nil
+	return insert, authors.Close, nil
 }
 
 func createAuthorIndexes(ctx context.Context, writer *sql.Tx) error {

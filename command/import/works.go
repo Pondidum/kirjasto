@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 )
 
 func WorksTables(ctx context.Context, writer *sql.DB) error {
@@ -21,14 +20,8 @@ create table if not exists works (
 	modified timestamp,
 	revision integer,
 	title text,
-	covers blob
-);
-
-create table if not exists work_authors (
-	work_id text,
-	author_id text,
-	foreign key (work_id) references works(id),
-	foreign key (author_id) references authors(id)
+	covers blob,
+	authors blob
 );
 `
 
@@ -41,37 +34,24 @@ create table if not exists work_authors (
 
 type importWork = func(ctx context.Context, work workDto) (int64, error)
 
-func importWorkCommand(writer *sql.DB) (importWork, error) {
+func importWorkCommand(writer *sql.Tx) (importWork, closer, error) {
 
-	works := `
+	works, err := writer.Prepare(`
 		insert into
-			works (id, created, modified, revision, title, covers)
-			values  (@id, @created, @modified, @revision, @title, @covers)
+			works (id, created, modified, revision, title, covers, authors)
+			values  (@id, @created, @modified, @revision, @title, @covers, @authors)
 		on conflict(id) do update set
 			created  = excluded.created,
 			modified = excluded.modified,
 			revision = excluded.revision,
 			title    = excluded.title,
-			covers   = excluded.covers
+			covers   = excluded.covers,
+			authors  = excluded.authors
 		where excluded.revision > works.revision;
-	`
-
-	fts := `
-		insert or replace into works_fts(id, title)
-		select @id, @title
-		where not exists (select * from works_fts where id = @id)
-	`
-
-	clearLinks := `
-		delete from work_authors
-		where work_id = @id;
-	`
-
-	addLinks := `
-		insert into work_authors (work_id, author_id)
-		select @id, json_extract(value, '$.key')
-		from json_each (@authors);
-	`
+	`)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	insert := func(ctx context.Context, work workDto) (int64, error) {
 		covers, err := json.Marshal(work.Covers)
@@ -83,38 +63,18 @@ func importWorkCommand(writer *sql.DB) (importWork, error) {
 		if err != nil {
 			return 0, err
 		}
-		fmt.Println(string(authors))
 
 		id := sql.Named("id", work.Key)
 		title := sql.Named("title", work.Title)
 
-		result, err := writer.ExecContext(ctx, works,
+		result, err := works.ExecContext(
+			ctx,
 			id,
 			sql.Named("created", work.Created.Value),
 			sql.Named("modified", work.Modified.Value),
 			sql.Named("revision", work.Revision),
 			title,
 			covers,
-		)
-		if err != nil {
-			return 0, err
-		}
-
-		_, err = writer.ExecContext(ctx, fts,
-			id,
-			title,
-		)
-		if err != nil {
-			return 0, err
-		}
-
-		_, err = writer.ExecContext(ctx, clearLinks, id)
-		if err != nil {
-			return 0, err
-		}
-
-		_, err = writer.ExecContext(ctx, addLinks,
-			id,
 			authors,
 		)
 		if err != nil {
@@ -124,5 +84,19 @@ func importWorkCommand(writer *sql.DB) (importWork, error) {
 		return result.RowsAffected()
 	}
 
-	return insert, nil
+	return insert, works.Close, nil
+}
+
+func createWorksIndexes(ctx context.Context, writer *sql.Tx) error {
+	_, err := writer.ExecContext(ctx, `
+		delete from works_fts;
+
+		insert into works_fts(id, title)
+		select id, title
+		from works
+	`)
+	if err != nil {
+		return err
+	}
+	return nil
 }

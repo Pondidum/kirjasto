@@ -181,11 +181,17 @@ func (c *ImportCommand) importWorks(ctx context.Context, db *sql.DB, reader io.R
 	ctx, span := tr.Start(ctx, "import_works")
 	defer span.End()
 
-	importWork, err := importWorkCommand(db)
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return tracing.Error(span, err)
+	}
+
+	importWork, close, err := importWorkCommand(tx)
 	if err != nil {
 		notify(recordProcessed{err: err})
 		return tracing.Error(span, err)
 	}
+	defer close()
 
 	for work, err := range Works(reader) {
 		if err != nil {
@@ -200,7 +206,15 @@ func (c *ImportCommand) importWorks(ctx context.Context, db *sql.DB, reader io.R
 		}
 
 		notify(recordProcessed{changed: count > 0})
-		break
+	}
+
+	notify(ftsCreationStarted{})
+	if err := createWorksIndexes(ctx, tx); err != nil {
+		return tracing.Error(span, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return tracing.Error(span, err)
 	}
 
 	notify(fileImported{})
