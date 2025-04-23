@@ -3,16 +3,16 @@
 {{ define "content" }}
 <h1>This is a list of all books available</h1>
 <form method="get" action="/catalogue">
-  <input type="text" name="query" value="{{ .QueryParams.query }}" />
+  <input type="text" name="query" value="{{ or .QueryParams.query "" }}" />
   <input type="submit" value="Search" />
 </form>
 <ol>
-  {{- range $i, $book := .Results }}
+  {{- range $i, $work := .Results }}
   <li>
-    <h3>{{ $book.Title }}</h3>
+    <h3><a href="/catalogue{{ $work.ID }}">{{ $work.Title }}</a></h3>
     <ul>
-      {{- range $i, $author := $book.Authors }}
-      <li><a href="{{ $author.ID }}">{{ $author.Name }}</a></li>
+      {{- range $i, $author := $work.Authors }}
+      <li><a href="/catalogue{{ $author.ID }}">{{ $author.Name }}</a></li>
       {{- end }}
     </ul>
   {{- end }}

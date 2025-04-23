@@ -36,7 +36,7 @@ func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.Serv
 
 		if query, found := form["query"]; found {
 
-			books, err := storage.FindBookByTitle(ctx, reader, query)
+			books, err := storage.FindWorkByTitle(ctx, reader, query)
 			if err != nil {
 				return err
 			}
@@ -52,16 +52,68 @@ func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.Serv
 		return nil
 	}))
 
-	mux.HandleFunc("GET /catalogue/book/{id}", routing.RouteHandler(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("GET /catalogue/works/{id}", routing.RouteHandler(func(w http.ResponseWriter, r *http.Request) error {
+		ctx, span := tr.Start(r.Context(), "get work")
+		defer span.End()
 
-		id := r.PathValue("id")
+		id := "/works/" + r.PathValue("id")
 
-		dto := &storage.Book{
-			ID: id,
+		form, err := routing.Form(r)
+		if err != nil {
+			return err
 		}
 
+		dto := map[string]any{
+			"QueryParams": form,
+		}
+
+		reader, err := storage.Reader(ctx, config.DatabaseFile)
+		if err != nil {
+			return err
+		}
+
+		work, err := storage.GetWorkByID(ctx, reader, id)
+		if err != nil {
+			return err
+		}
+		dto["Work"] = work
+
 		w.Header().Set("Content-Type", "text/html")
-		if err := engine.Render(r.Context(), "catalogue/book.html", dto, w); err != nil {
+		if err := engine.Render(ctx, "catalogue/work.html", dto, w); err != nil {
+			return err
+		}
+
+		return nil
+	}))
+
+	mux.HandleFunc("GET /catalogue/authors/{id}", routing.RouteHandler(func(w http.ResponseWriter, r *http.Request) error {
+		ctx, span := tr.Start(r.Context(), "get author")
+		defer span.End()
+
+		id := "/authors/" + r.PathValue("id")
+
+		form, err := routing.Form(r)
+		if err != nil {
+			return err
+		}
+
+		dto := map[string]any{
+			"QueryParams": form,
+		}
+
+		reader, err := storage.Reader(ctx, config.DatabaseFile)
+		if err != nil {
+			return err
+		}
+
+		work, err := storage.GetAuthorByID(ctx, reader, id)
+		if err != nil {
+			return err
+		}
+		dto["Author"] = work
+
+		w.Header().Set("Content-Type", "text/html")
+		if err := engine.Render(ctx, "catalogue/author.html", dto, w); err != nil {
 			return err
 		}
 

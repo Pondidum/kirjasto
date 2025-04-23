@@ -11,11 +11,14 @@ import (
 )
 
 type Author struct {
-	ID   string
-	Name string
+	ID       string
+	Created  time.Time
+	Modified time.Time
+	Revision int
+	Name     string
 }
 
-type Book struct {
+type Work struct {
 	ID       string
 	Created  time.Time
 	Modified time.Time
@@ -25,8 +28,94 @@ type Book struct {
 	Covers   []int
 }
 
-func FindBookByTitle(ctx context.Context, reader *sql.DB, term string) ([]Book, error) {
-	ctx, span := tr.Start(ctx, "find_book_by_title")
+type Match struct {
+	Work
+	Match string
+}
+
+func GetWorkByID(ctx context.Context, reader *sql.DB, id string) (*Work, error) {
+	ctx, span := tr.Start(ctx, "get_work")
+	defer span.End()
+
+	span.SetAttributes(attribute.String("work.id", id))
+
+	query := `
+	select
+			w.id,
+			w.created,
+			w.modified,
+			w.revision,
+			w.title,
+			(
+				select json_group_array(json_object('id', a.id, 'name', a.name))
+				from json_each(w.authors) j
+				join authors a on a.id == json_extract(j.value, '$.key')
+			) as 'authors',
+			w.covers
+		from works w
+		where w.id = @id
+	`
+
+	rows := reader.QueryRowContext(ctx, query, sql.Named("id", id))
+
+	book := Work{}
+	var authorsJson []byte
+	var coversJson []byte
+
+	err := rows.Scan(&book.ID, &book.Created, &book.Modified, &book.Revision, &book.Title, &authorsJson, &coversJson)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, tracing.Error(span, err)
+	}
+
+	if err := json.Unmarshal([]byte(coversJson), &book.Covers); err != nil {
+		return nil, tracing.Error(span, err)
+	}
+
+	if err := json.Unmarshal(authorsJson, &book.Authors); err != nil {
+		return nil, tracing.Error(span, err)
+	}
+
+	return &book, nil
+
+}
+
+func GetAuthorByID(ctx context.Context, reader *sql.DB, id string) (*Author, error) {
+	ctx, span := tr.Start(ctx, "get_author")
+	defer span.End()
+
+	span.SetAttributes(attribute.String("author.id", id))
+
+	query := `
+	select
+			id,
+			created,
+			modified,
+			revision,
+			name
+		from authors
+		where id = @id
+	`
+
+	rows := reader.QueryRowContext(ctx, query, sql.Named("id", id))
+
+	author := Author{}
+
+	err := rows.Scan(&author.ID, &author.Created, &author.Modified, &author.Revision, &author.Name)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, tracing.Error(span, err)
+	}
+
+	return &author, nil
+}
+
+func FindWorkByTitle(ctx context.Context, reader *sql.DB, term string) ([]Match, error) {
+	ctx, span := tr.Start(ctx, "find_work_by_title")
 	defer span.End()
 
 	span.SetAttributes(attribute.String("term", term))
@@ -55,9 +144,9 @@ func FindBookByTitle(ctx context.Context, reader *sql.DB, term string) ([]Book, 
 		return nil, tracing.Error(span, err)
 	}
 
-	books := []Book{}
+	matches := []Match{}
 	for rows.Next() {
-		book := Book{}
+		book := Work{}
 		var authorsJson []byte
 		var coversJson []byte
 		var match string
@@ -74,8 +163,11 @@ func FindBookByTitle(ctx context.Context, reader *sql.DB, term string) ([]Book, 
 			return nil, tracing.Error(span, err)
 		}
 
-		books = append(books, book)
+		matches = append(matches, Match{
+			Work:  book,
+			Match: match,
+		})
 	}
 
-	return books, nil
+	return matches, nil
 }
