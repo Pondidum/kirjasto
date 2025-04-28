@@ -9,7 +9,7 @@ import (
 	"kirjasto/template"
 	"kirjasto/tracing"
 	"kirjasto/ui/catalogue"
-	"kirjasto/ui/library"
+	"kirjasto/ui/landing"
 	"net/http"
 	"os"
 	"path"
@@ -62,7 +62,7 @@ func RegisterUI(ctx context.Context, cfg *config.Config, server *http.ServeMux) 
 
 	// app areas
 	handlers = append(handlers,
-		library.RegisterHandlers,
+		landing.RegisterHandlers,
 		catalogue.RegisterHandlers,
 	)
 

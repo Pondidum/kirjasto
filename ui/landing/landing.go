@@ -1,4 +1,4 @@
-package library
+package landing
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 )
 
 func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.ServeMux, engine *template.TemplateEngine) error {
-	mux.HandleFunc("GET /landing", routing.RouteHandler(func(w http.ResponseWriter, r *http.Request) error {
+	mux.HandleFunc("GET /", routing.RouteHandler(func(w http.ResponseWriter, r *http.Request) error {
 
 		if err := r.ParseForm(); err != nil {
 			return err
@@ -42,7 +42,7 @@ func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.Serv
 		fmt.Println(filter.Filter, filter.Ownership, filter.Progress, filter.Type)
 
 		w.Header().Set("Content-Type", "text/html")
-		if err := engine.Render(r.Context(), "library/landing.html", dto, w); err != nil {
+		if err := engine.Render(r.Context(), "landing/landing.html", dto, w); err != nil {
 			return err
 		}
 		return nil
