@@ -34,7 +34,7 @@ func (c *ImportCommand) Synopsis() string {
 }
 
 func (c *ImportCommand) Flags() *pflag.FlagSet {
-	flags := pflag.NewFlagSet("server", pflag.ContinueOnError)
+	flags := pflag.NewFlagSet("import.openlibrary", pflag.ContinueOnError)
 	return flags
 }
 
