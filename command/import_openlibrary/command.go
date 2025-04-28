@@ -1,4 +1,4 @@
-package importcmd
+package import_openlibrary
 
 import (
 	"bufio"
@@ -20,7 +20,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-var tr = otel.Tracer("command.import")
+var tr = otel.Tracer("command.import.openlibrary")
 
 func NewImportCommand() *ImportCommand {
 	return &ImportCommand{}
@@ -30,7 +30,7 @@ type ImportCommand struct {
 }
 
 func (c *ImportCommand) Synopsis() string {
-	return "import something or other"
+	return "import openlibrary works or authors"
 }
 
 func (c *ImportCommand) Flags() *pflag.FlagSet {

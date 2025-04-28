@@ -1,4 +1,4 @@
-package importcmd
+package import_openlibrary
 
 import (
 	"encoding/json"
