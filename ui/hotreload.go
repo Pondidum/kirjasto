@@ -30,7 +30,7 @@ func (hr *hotReload) Register(ctx context.Context, cfg *config.Config, mux *http
 	hr.createToken()
 
 	upgrader := websocket.Upgrader{}
-	mux.HandleFunc("/ws/hotreload", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /ws/hotreload", func(w http.ResponseWriter, r *http.Request) {
 		c, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			tracing.ErrorCtx(r.Context(), err)

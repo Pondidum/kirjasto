@@ -11,7 +11,7 @@ import (
 
 func StaticFilesHandler(fs template.FS) routing.Handler {
 	return func(ctx context.Context, cfg *config.Config, mux *http.ServeMux, engine *template.TemplateEngine) error {
-		mux.Handle("/static/", WithPrefix("/common", http.FileServerFS(fs)))
+		mux.Handle("GET /static/", WithPrefix("/common", http.FileServerFS(fs)))
 		return nil
 	}
 }
