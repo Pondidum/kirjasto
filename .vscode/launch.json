@@ -10,7 +10,11 @@
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}",
-      "args": ["server"]
+      "buildFlags": ["--tags", "fts5"],
+      "args": ["server"],
+      "env": {
+        "OTEL_EXPORTER_OTLP_INSECURE": "true"
+      }
     },
     {
       "name": "import authors",
@@ -18,7 +22,8 @@
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}",
-      "args": ["import", ".data/openlibrary/ol_dump_authors_2025-02-11.txt"]
+      "args": ["import", ".data/openlibrary/ol_dump_authors_2025-02-11.txt"],
+      "buildFlags": ["--tags", "fts5"]
     }
   ]
 }
