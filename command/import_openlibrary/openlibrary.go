@@ -10,15 +10,40 @@ import (
 )
 
 func Authors(r io.Reader) iter.Seq2[*authorDto, error] {
-	return iterateFile[authorDto](r)
+	return iterateRecords[authorDto](r)
 }
 
 func Works(r io.Reader) iter.Seq2[*workDto, error] {
-	return iterateFile[workDto](r)
+	return iterateRecords[workDto](r)
 }
 
-func iterateFile[T any](r io.Reader) iter.Seq2[*T, error] {
+func iterateRecords[T any](r io.Reader) iter.Seq2[*T, error] {
 	return func(yield func(*T, error) bool) {
+		for content, err := range iterateFile(r) {
+			if err != nil {
+				if !yield(nil, err) {
+					return
+				}
+			}
+
+			dto := new(T)
+
+			if err := json.Unmarshal([]byte(content), &dto); err != nil {
+				if !yield(nil, fmt.Errorf("error parsing json: %w", err)) {
+					return
+				}
+			}
+
+			if !yield(dto, nil) {
+				return
+			}
+		}
+
+	}
+}
+
+func iterateFile(r io.Reader) iter.Seq2[string, error] {
+	return func(yield func(string, error) bool) {
 
 		reader := csv.NewReader(r)
 		reader.Comma = '\t'
@@ -30,19 +55,12 @@ func iterateFile[T any](r io.Reader) iter.Seq2[*T, error] {
 				break
 			}
 			if err != nil {
-				if !yield(nil, err) {
+				if !yield("", err) {
 					return
 				}
 			}
 
-			dto := new(T)
-
-			if err := json.Unmarshal([]byte(line[fieldJson]), &dto); err != nil {
-				if !yield(nil, fmt.Errorf("error parsing %s: %w", line[fieldId], err)) {
-					return
-				}
-			}
-			if !yield(dto, nil) {
+			if !yield(line[fieldJson], nil) {
 				return
 			}
 

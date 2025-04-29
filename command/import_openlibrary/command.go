@@ -107,7 +107,7 @@ func (c *ImportCommand) detectFileType(ctx context.Context, filePath string) (fi
 	}
 	defer file.Close()
 
-	iterator := iterateFile[Record](file)
+	iterator := iterateRecords[Record](file)
 
 	for record, err := range iterator {
 		if err != nil {
