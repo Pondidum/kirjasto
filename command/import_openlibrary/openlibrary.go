@@ -17,6 +17,10 @@ func Works(r io.Reader) iter.Seq2[*workDto, error] {
 	return iterateRecords[workDto](r)
 }
 
+func Editions(r io.Reader) iter.Seq2[[]byte, error] {
+	return iterateFile(r)
+}
+
 func iterateRecords[T any](r io.Reader) iter.Seq2[*T, error] {
 	return func(yield func(*T, error) bool) {
 		for content, err := range iterateFile(r) {
@@ -28,7 +32,7 @@ func iterateRecords[T any](r io.Reader) iter.Seq2[*T, error] {
 
 			dto := new(T)
 
-			if err := json.Unmarshal([]byte(content), &dto); err != nil {
+			if err := json.Unmarshal(content, &dto); err != nil {
 				if !yield(nil, fmt.Errorf("error parsing json: %w", err)) {
 					return
 				}
@@ -42,8 +46,8 @@ func iterateRecords[T any](r io.Reader) iter.Seq2[*T, error] {
 	}
 }
 
-func iterateFile(r io.Reader) iter.Seq2[string, error] {
-	return func(yield func(string, error) bool) {
+func iterateFile(r io.Reader) iter.Seq2[[]byte, error] {
+	return func(yield func([]byte, error) bool) {
 
 		reader := csv.NewReader(r)
 		reader.Comma = '\t'
@@ -55,12 +59,13 @@ func iterateFile(r io.Reader) iter.Seq2[string, error] {
 				break
 			}
 			if err != nil {
-				if !yield("", err) {
+				if !yield(nil, err) {
 					return
 				}
 			}
 
-			if !yield(line[fieldJson], nil) {
+			content := line[fieldJson]
+			if !yield([]byte(content), nil) {
 				return
 			}
 
@@ -118,6 +123,12 @@ func (al *authorLink) UnmarshalJSON(data []byte) error {
 type authorDto struct {
 	Record
 	Name string
+}
+
+type editionDto struct {
+	Record
+	Isbn10 []string `json:"isbn_10"`
+	Isbn13 []string `json:"isbn_13"`
 }
 
 const (

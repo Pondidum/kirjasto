@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"io"
 	"kirjasto/config"
 	"kirjasto/storage"
@@ -66,6 +67,10 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		return tracing.Error(span, err)
 	}
 
+	if err := EditionsTables(ctx, db); err != nil {
+		return tracing.Error(span, err)
+	}
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		return tracing.Error(span, err)
@@ -85,8 +90,10 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		go c.importWorks(ctx, db, file, prg.Send)
 	case "authors":
 		go c.importAuthors(ctx, db, file, prg.Send)
+	case "books":
+		go c.importEditions(ctx, db, file, prg.Send)
 	default:
-		return tracing.Errorf(span, "only 'work' and 'author' records are supported, received '%s'", fileInfo.Type)
+		return tracing.Errorf(span, "only 'work', 'author', and 'edition' records are supported, received '%s'", fileInfo.Type)
 	}
 
 	if _, err := prg.Run(); err != nil {
@@ -129,6 +136,64 @@ func (c *ImportCommand) detectFileType(ctx context.Context, filePath string) (fi
 	}
 
 	return info, nil
+}
+
+func (c *ImportCommand) importEditions(ctx context.Context, db *sql.DB, reader io.Reader, notify func(msg tea.Msg)) error {
+	ctx, span := tr.Start(ctx, "import_editions")
+	defer span.End()
+
+	tx, err := db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return tracing.Error(span, err)
+	}
+
+	importEdition, close, err := importEditionsCommand(tx)
+	if err != nil {
+		notify(recordProcessed{err: err})
+		return tracing.Error(span, err)
+	}
+	defer close()
+
+	for edition, err := range Editions(reader) {
+		if err != nil {
+			notify(recordProcessed{err: err})
+			return tracing.Error(span, err)
+		}
+
+		record := &editionDto{}
+		if err := json.Unmarshal(edition, record); err != nil {
+			return tracing.Error(span, err)
+		}
+
+		total := int64(0)
+		for _, isbn := range record.Isbn10 {
+			count, err := importEdition(ctx, isbn, edition)
+			if err != nil {
+				notify(recordProcessed{err: err})
+				return tracing.Error(span, err)
+			}
+			total += count
+		}
+
+		for _, isbn := range record.Isbn13 {
+			count, err := importEdition(ctx, isbn, edition)
+			if err != nil {
+				notify(recordProcessed{err: err})
+				return tracing.Error(span, err)
+			}
+			total += count
+		}
+
+		notify(recordProcessed{changed: total > 0})
+	}
+
+	if err := tx.Commit(); err != nil {
+		return tracing.Error(span, err)
+	}
+
+	notify(fileImported{})
+
+	return nil
 }
 
 func (c *ImportCommand) importAuthors(ctx context.Context, db *sql.DB, reader io.Reader, notify func(msg tea.Msg)) error {
