@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"kirjasto/config"
-	"kirjasto/storage"
 	"kirjasto/tracing"
 	"kirjasto/ui"
 	"net/http"
@@ -38,15 +37,6 @@ func (c *ServerCommand) Flags() *pflag.FlagSet {
 func (c *ServerCommand) Execute(ctx context.Context, config *config.Config, args []string) error {
 	ctx, span := tr.Start(ctx, "execute")
 	defer span.End()
-
-	writer, err := storage.Writer(ctx, config.DatabaseFile)
-	if err != nil {
-		return tracing.Error(span, err)
-	}
-
-	if err := storage.CreateLibraryTable(ctx, writer); err != nil {
-		return tracing.Error(span, err)
-	}
 
 	mux := http.NewServeMux()
 
