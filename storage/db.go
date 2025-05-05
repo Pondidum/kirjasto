@@ -9,6 +9,7 @@ import (
 	"path"
 	"runtime"
 
+	"github.com/XSAM/otelsql"
 	"go.opentelemetry.io/otel"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -25,7 +26,7 @@ func Writer(ctx context.Context, dbPath string) (*sql.DB, error) {
 		return nil, tracing.Error(span, err)
 	}
 
-	db, err := sql.Open("sqlite3", connectionString(dbPath))
+	db, err := otelsql.Open("sqlite3", connectionString(dbPath))
 	if err != nil {
 		return nil, tracing.Error(span, err)
 	}
@@ -42,7 +43,7 @@ func Reader(ctx context.Context, dbPath string) (*sql.DB, error) {
 	ctx, span := tr.Start(ctx, "open_reader")
 	defer span.End()
 
-	db, err := sql.Open("sqlite3", connectionString(dbPath))
+	db, err := otelsql.Open("sqlite3", connectionString(dbPath))
 	if err != nil {
 		return nil, tracing.Error(span, err)
 	}
