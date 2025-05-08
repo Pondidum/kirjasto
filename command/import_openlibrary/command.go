@@ -74,6 +74,10 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		return tracing.Error(span, err)
 	}
 
+	if err := c.addIndexes(ctx, writer); err != nil {
+		return tracing.Error(span, err)
+	}
+
 	return nil
 }
 
@@ -115,6 +119,27 @@ func (c *ImportCommand) createTables(ctx context.Context, writer *sql.DB) error 
 			foreign key(edition_id) references editions(id),
 			foreign key(author_id) references authors(id)
 		)`,
+	}
+
+	for _, statement := range statements {
+		if _, err := writer.ExecContext(ctx, statement); err != nil {
+			return tracing.Error(span, err)
+		}
+	}
+
+	return nil
+}
+
+func (c *ImportCommand) addIndexes(ctx context.Context, writer *sql.DB) error {
+	ctx, span := tr.Start(ctx, "add_indexes")
+	defer span.End()
+
+	statements := []string{
+		"create index if not exists editions_authors_link_edition_idx on editions_authors_link(edition_id)",
+		"create index if not exists editions_authors_link_author_idx on editions_authors_link(author_id)",
+		"create index if not exists editions_isbns_link_isbn_idx on editions_isbns_link(isbn)",
+		"create index if not exists editions_works_link_editions_idx on editions_works_link(edition_id)",
+		"create index if not exists editions_works_link_works_idx on editions_works_link(work_id)",
 	}
 
 	for _, statement := range statements {
