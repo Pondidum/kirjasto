@@ -7,11 +7,12 @@
   <input type="submit" value="Search" />
 </form>
 <ol>
-  {{- range $i, $work := .Results }}
+  {{- range $i, $book := .Results }}
+  {{- $edition := index $book.Editions 0 }}
   <li>
-    <h3><a href="/catalogue{{ $work.ID }}">{{ $work.Title }}</a></h3>
+    <h3><a href="/catalogue/books/{{ $book.ID }}">{{ $edition.Title }}</a></h3>
     <ul>
-      {{- range $i, $author := $work.Authors }}
+      {{- range $i, $author := $edition.Authors }}
       <li><a href="/catalogue{{ $author.ID }}">{{ $author.Name }}</a></li>
       {{- end }}
     </ul>

@@ -4,170 +4,204 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"kirjasto/tracing"
-	"time"
+	"maps"
+	"path"
+	"slices"
 
 	"go.opentelemetry.io/otel/attribute"
 )
 
-type Author struct {
+type Book struct {
 	ID       string
-	Created  time.Time
-	Modified time.Time
-	Revision int
-	Name     string
+	Editions []*Edition
+
+	editions map[string]*Edition
 }
 
-type Work struct {
-	ID       string
-	Created  time.Time
-	Modified time.Time
-	Revision int
+func (b *Book) Edition(isbn string) *Edition {
+	if e, found := b.editions[isbn]; found {
+		return e
+	}
+
+	return nil
+}
+
+type Edition struct {
+	Isbns []string
+
 	Title    string
+	Subtitle string
 	Authors  []Author
-	Covers   []int
+	Covers   []int // ??
 }
 
-type Match struct {
-	Work
-	Match string
+type Author struct {
+	ID   string
+	Name string
 }
 
-func GetWorkByID(ctx context.Context, reader *sql.DB, id string) (*Work, error) {
-	ctx, span := tr.Start(ctx, "get_work")
+func GetBookByID(ctx context.Context, reader *sql.DB, id string) (*Book, error) {
+	ctx, span := tr.Start(ctx, "get_book_by_id")
 	defer span.End()
 
-	span.SetAttributes(attribute.String("work.id", id))
+	span.SetAttributes(attribute.String("book.id", id))
 
+	workId := fmt.Sprintf("/works/%s", id)
 	query := `
-	select
-			w.id,
-			w.created,
-			w.modified,
-			w.revision,
-			w.title,
+		select
+			e.data,
 			(
-				select json_group_array(json_object('id', a.id, 'name', a.name))
-				from json_each(w.authors) j
-				join authors a on a.id == json_extract(j.value, '$.key')
-			) as 'authors',
-			w.covers
-		from works w
-		where w.id = @id
+				select json_group_array(json(a.data))
+				from editions_authors_link eal
+				join authors a on a.id = eal.author_id
+				where eal.edition_id  = e.id
+			)
+		from editions e
+		join editions_works_link ewl on e.id = ewl.edition_id
+		where ewl.work_id  = @id
 	`
 
-	rows := reader.QueryRowContext(ctx, query, sql.Named("id", id))
-
-	book := Work{}
-	var authorsJson []byte
-	var coversJson []byte
-
-	err := rows.Scan(&book.ID, &book.Created, &book.Modified, &book.Revision, &book.Title, &authorsJson, &coversJson)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
+	rows, err := reader.QueryContext(ctx, query, sql.Named("id", workId))
 	if err != nil {
 		return nil, tracing.Error(span, err)
 	}
 
-	if err := json.Unmarshal([]byte(coversJson), &book.Covers); err != nil {
-		return nil, tracing.Error(span, err)
-	}
-
-	if err := json.Unmarshal(authorsJson, &book.Authors); err != nil {
-		return nil, tracing.Error(span, err)
-	}
-
-	return &book, nil
-
-}
-
-func GetAuthorByID(ctx context.Context, reader *sql.DB, id string) (*Author, error) {
-	ctx, span := tr.Start(ctx, "get_author")
-	defer span.End()
-
-	span.SetAttributes(attribute.String("author.id", id))
-
-	query := `
-	select
-			id,
-			created,
-			modified,
-			revision,
-			name
-		from authors
-		where id = @id
-	`
-
-	rows := reader.QueryRowContext(ctx, query, sql.Named("id", id))
-
-	author := Author{}
-
-	err := rows.Scan(&author.ID, &author.Created, &author.Modified, &author.Revision, &author.Name)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
+	books, err := buildBooks(ctx, rows)
 	if err != nil {
 		return nil, tracing.Error(span, err)
 	}
 
-	return &author, nil
+	if book, found := books[id]; found {
+		return &book, nil
+	}
+
+	return nil, nil
+
 }
 
-func FindWorkByTitle(ctx context.Context, reader *sql.DB, term string) ([]Match, error) {
-	ctx, span := tr.Start(ctx, "find_work_by_title")
+func FindBooks(ctx context.Context, reader *sql.DB, search string) ([]Book, error) {
+	ctx, span := tr.Start(ctx, "find_books")
 	defer span.End()
-
-	span.SetAttributes(attribute.String("term", term))
 
 	query := `
 		select
-			w.id,
-			w.created,
-			w.modified,
-			w.revision,
-			w.title,
+			e.data,
 			(
-				select json_group_array(json_object('id', a.id, 'name', a.name))
-				from json_each(w.authors) j
-				join authors a on a.id == json_extract(j.value, '$.key')
-			) as 'authors',
-			w.covers,
-			highlight(works_fts, 1, '{{', '}}') as 'match'
-		from works_fts fts
-		join works w on w.id = fts.id
+				select json_group_array(json(a.data))
+				from editions_authors_link eal
+				join authors a on a.id = eal.author_id
+				where eal.edition_id  = e.id
+			) --,
+			-- highlight(editions_fts, 1, '{{', '}}')
+		from editions e
+		join editions_fts fts on e.id = fts.edition_id
 		where fts.title match @term
 	`
 
-	rows, err := reader.QueryContext(ctx, query, sql.Named("term", term))
+	rows, err := reader.QueryContext(ctx, query, sql.Named("term", search))
 	if err != nil {
 		return nil, tracing.Error(span, err)
 	}
 
-	matches := []Match{}
-	for rows.Next() {
-		book := Work{}
-		var authorsJson []byte
-		var coversJson []byte
-		var match string
-
-		if err := rows.Scan(&book.ID, &book.Created, &book.Modified, &book.Revision, &book.Title, &authorsJson, &coversJson, &match); err != nil {
-			return nil, tracing.Error(span, err)
-		}
-
-		if err := json.Unmarshal([]byte(coversJson), &book.Covers); err != nil {
-			return nil, tracing.Error(span, err)
-		}
-
-		if err := json.Unmarshal(authorsJson, &book.Authors); err != nil {
-			return nil, tracing.Error(span, err)
-		}
-
-		matches = append(matches, Match{
-			Work:  book,
-			Match: match,
-		})
+	books, err := buildBooks(ctx, rows)
+	if err != nil {
+		return nil, tracing.Error(span, err)
 	}
 
-	return matches, nil
+	return slices.Collect(maps.Values(books)), nil
+}
+
+func buildBooks(ctx context.Context, rows *sql.Rows) (map[string]Book, error) {
+	ctx, span := tr.Start(ctx, "build_books")
+	defer span.End()
+
+	books := map[string]Book{}
+
+	for rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, tracing.Error(span, err)
+		}
+
+		editionJson := ""
+		authorJson := ""
+
+		if err := rows.Scan(&editionJson, &authorJson); err != nil {
+			return nil, tracing.Error(span, err)
+		}
+
+		editionDto := editionDto{}
+		if err := json.Unmarshal([]byte(editionJson), &editionDto); err != nil {
+			return nil, tracing.Error(span, err)
+		}
+
+		authors := []authorDto{}
+		if err := json.Unmarshal([]byte(authorJson), &authors); err != nil {
+			return nil, tracing.Error(span, err)
+		}
+
+		edition := &Edition{
+			Title:    editionDto.Title,
+			Subtitle: editionDto.Subtitle,
+			Isbns:    append(editionDto.Isbn10, editionDto.Isbn13...),
+			Authors:  authorsFromJson(authors),
+		}
+
+		for _, w := range editionDto.Works {
+			bookId := path.Base(w.Key)
+			book, exists := books[bookId]
+			if !exists {
+				book = Book{
+					ID:       bookId,
+					editions: map[string]*Edition{},
+				}
+				books[book.ID] = book
+			}
+
+			book.Editions = append(book.Editions, edition)
+			for _, isbn := range edition.Isbns {
+				book.editions[isbn] = edition
+			}
+
+			books[book.ID] = book
+		}
+
+	}
+
+	return books, nil
+}
+
+func authorsFromJson(dto []authorDto) []Author {
+
+	authors := make([]Author, len(dto))
+	for i, src := range dto {
+		authors[i] = Author{
+			ID:   src.Key,
+			Name: src.Name,
+		}
+	}
+	return authors
+}
+
+type editionDto struct {
+	Key string
+
+	Title          string
+	Subtitle       string
+	PhysicalFormat string `json:"physical_format"`
+
+	Isbn10 []string `json:"isbn_10"`
+	Isbn13 []string `json:"isbn_13"`
+
+	Works []workDto
+}
+
+type authorDto struct {
+	Key  string
+	Name string
+}
+
+type workDto struct {
+	Key string `json:"key"`
 }

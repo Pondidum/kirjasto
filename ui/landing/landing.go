@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"kirjasto/config"
 	"kirjasto/routing"
-	"kirjasto/storage"
 	"kirjasto/template"
 	"net/http"
 )
@@ -24,18 +23,17 @@ func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.Serv
 			Progress:  r.FormValue("progress"),
 		}
 
-		reader, err := storage.Reader(ctx, config.DatabaseFile)
-		if err != nil {
-			return err
-		}
+		// reader, err := storage.Reader(ctx, config.DatabaseFile)
+		// if err != nil {
+		// 	return err
+		// }
 
-		library, err := storage.LibraryContents(ctx, reader)
-		if err != nil {
-			return err
-		}
+		// library, err := storage.LibraryContents(ctx, reader)
+		// if err != nil {
+		// 	return err
+		// }
 
 		dto := map[string]any{
-			"Books":  library,
 			"Filter": filter,
 		}
 

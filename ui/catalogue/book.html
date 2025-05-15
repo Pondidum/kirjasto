@@ -1,0 +1,12 @@
+{{ define "title" }}{{ .Edition.Title }}{{ end }}
+
+{{ define "content" }}
+<h1>{{ .Edition.Title }}</h1>
+
+<h3>Other Editions</h3>
+<ol>
+  {{- range $i, $edition := .Book.Editions }}
+  <li>{{ $edition.Title }} {{ $edition.Subtitle }}</li>
+  {{- end }}
+</ol>
+{{ end }}
