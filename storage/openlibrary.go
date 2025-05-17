@@ -9,6 +9,7 @@ import (
 	"maps"
 	"path"
 	"slices"
+	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -35,6 +36,8 @@ type Edition struct {
 	Subtitle string
 	Authors  []Author
 	Covers   []int // ??
+
+	PublishDate time.Time
 }
 
 type Author struct {
@@ -74,14 +77,14 @@ func GetBookByID(ctx context.Context, reader *sql.DB, id string) (*Book, error) 
 	}
 
 	if book, found := books[id]; found {
-		return &book, nil
+		return book, nil
 	}
 
 	return nil, nil
 
 }
 
-func FindBooks(ctx context.Context, reader *sql.DB, search string) ([]Book, error) {
+func FindBooks(ctx context.Context, reader *sql.DB, search string) ([]*Book, error) {
 	ctx, span := tr.Start(ctx, "find_books")
 	defer span.End()
 
@@ -113,11 +116,11 @@ func FindBooks(ctx context.Context, reader *sql.DB, search string) ([]Book, erro
 	return slices.Collect(maps.Values(books)), nil
 }
 
-func buildBooks(ctx context.Context, rows *sql.Rows) (map[string]Book, error) {
+func buildBooks(ctx context.Context, rows *sql.Rows) (map[string]*Book, error) {
 	ctx, span := tr.Start(ctx, "build_books")
 	defer span.End()
 
-	books := map[string]Book{}
+	books := map[string]*Book{}
 
 	for rows.Next() {
 		if err := rows.Err(); err != nil {
@@ -152,7 +155,7 @@ func buildBooks(ctx context.Context, rows *sql.Rows) (map[string]Book, error) {
 			bookId := path.Base(w.Key)
 			book, exists := books[bookId]
 			if !exists {
-				book = Book{
+				book = &Book{
 					ID:       bookId,
 					editions: map[string]*Edition{},
 				}
@@ -166,7 +169,16 @@ func buildBooks(ctx context.Context, rows *sql.Rows) (map[string]Book, error) {
 
 			books[book.ID] = book
 		}
+	}
 
+	for _, book := range books {
+		slices.SortFunc(book.Editions, func(a, b *Edition) int {
+			if a.PublishDate.Before(b.PublishDate) {
+				return -1
+			} else {
+				return 1
+			}
+		})
 	}
 
 	return books, nil
@@ -190,6 +202,8 @@ type editionDto struct {
 	Title          string
 	Subtitle       string
 	PhysicalFormat string `json:"physical_format"`
+
+	PublishDate string `json:"publish_data"`
 
 	Isbn10 []string `json:"isbn_10"`
 	Isbn13 []string `json:"isbn_13"`

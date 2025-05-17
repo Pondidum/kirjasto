@@ -18,7 +18,7 @@ func TestFindingBooks(t *testing.T) {
 	require.Equal(t, 8, len(books))
 	require.NotEmpty(t, books[0].Editions)
 
-	i := slices.IndexFunc(books, func(b Book) bool { return b.ID == "OL20036147W" })
+	i := slices.IndexFunc(books, func(b *Book) bool { return b.ID == "OL20036147W" })
 	book := books[i]
 	require.Equal(t, "OL20036147W", book.ID)
 	require.Len(t, book.Editions, 7)
