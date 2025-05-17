@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"kirjasto/tracing"
-	"maps"
 	"path"
 	"slices"
 	"time"
@@ -18,6 +17,7 @@ type Book struct {
 	ID       string
 	Editions []*Edition
 
+	rank     int
 	editions map[string]*Edition
 }
 
@@ -101,6 +101,7 @@ func FindBooks(ctx context.Context, reader *sql.DB, search string) ([]*Book, err
 		from editions e
 		join editions_fts fts on e.id = fts.edition_id
 		where fts.title match @term
+		order by rank
 	`
 
 	rows, err := reader.QueryContext(ctx, query, sql.Named("term", search))
@@ -113,7 +114,11 @@ func FindBooks(ctx context.Context, reader *sql.DB, search string) ([]*Book, err
 		return nil, tracing.Error(span, err)
 	}
 
-	return slices.Collect(maps.Values(books)), nil
+	results := make([]*Book, len(books))
+	for _, book := range books {
+		results[book.rank] = book
+	}
+	return results, nil
 }
 
 func buildBooks(ctx context.Context, rows *sql.Rows) (map[string]*Book, error) {
@@ -122,6 +127,7 @@ func buildBooks(ctx context.Context, rows *sql.Rows) (map[string]*Book, error) {
 
 	books := map[string]*Book{}
 
+	rank := 0
 	for rows.Next() {
 		if err := rows.Err(); err != nil {
 			return nil, tracing.Error(span, err)
@@ -157,9 +163,11 @@ func buildBooks(ctx context.Context, rows *sql.Rows) (map[string]*Book, error) {
 			if !exists {
 				book = &Book{
 					ID:       bookId,
+					rank:     rank,
 					editions: map[string]*Edition{},
 				}
 				books[book.ID] = book
+				rank++
 			}
 
 			book.Editions = append(book.Editions, edition)
