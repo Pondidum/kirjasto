@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"kirjasto/command"
+	"kirjasto/command/import_goodreads"
 	"kirjasto/command/import_openlibrary"
 	"kirjasto/command/server"
 	"kirjasto/command/version"
@@ -17,6 +18,7 @@ func main() {
 		"version":            command.NewCommand(version.NewVersionCommand()),
 		"server":             command.NewCommand(server.NewServerCommand()),
 		"import openlibrary": command.NewCommand(import_openlibrary.NewImportCommand()),
+		"import goodreads":   command.NewCommand(import_goodreads.NewImportCommand()),
 	}
 
 	cli := &cli.CLI{
