@@ -55,43 +55,29 @@ func Save(ctx context.Context, db *sql.DB, state *AggregateState) error {
 	}
 	defer tx.Rollback()
 
-	var dbSequence sql.NullInt64
-	if err := tx.QueryRowContext(ctx, "select max(sequence) from events where aggregate_id = ?", state.ID()).Scan(&dbSequence); err != nil {
-		if err != sql.ErrNoRows {
-			return tracing.Error(span, err)
-		}
-	}
-
-	sequence := Sequence(state)
-
-	if dbSequence.Valid && dbSequence.Int64 > int64(sequence) {
-		return fmt.Errorf("aggregate has new events in the database. db: %v, memory: %v", dbSequence, sequence)
-	}
-
-	insertEvent, err := tx.PrepareContext(ctx, `insert into events (aggregate_id, sequence, timestamp, event_type, event_data) values (?, ?, ?, ?, ?)`)
-	if err != nil {
+	if err := validateSequence(ctx, tx, state); err != nil {
 		return tracing.Error(span, err)
 	}
-	defer insertEvent.Close()
 
-	err = SaveEvents(state, func(e EventDescriptor) error {
+	if err := projectionist.Load(ctx, tx); err != nil {
+		return tracing.Error(span, err)
+	}
 
-		eventJson, err := json.Marshal(e.Event)
-		if err != nil {
-			return tracing.Error(span, err)
-		}
-
-		if _, err := insertEvent.ExecContext(ctx, e.AggregateID, e.Sequence, e.Timestamp, e.EventType, eventJson); err != nil {
-			return tracing.Error(span, err)
-		}
-
-		return nil
-	})
+	writer, err := newEventWriter(ctx, tx)
 	if err != nil {
 		return tracing.Error(span, err)
 	}
 
-	if err := writeAutoProjection(ctx, tx, state); err != nil {
+	for event := range pendingEvents(state) {
+		if err := writer.Write(ctx, event); err != nil {
+			return err
+		}
+		if err := projectionist.Project(ctx, event); err != nil {
+			return tracing.Error(span, err)
+		}
+	}
+
+	if err := projectionist.Save(ctx, tx); err != nil {
 		return tracing.Error(span, err)
 	}
 
@@ -102,33 +88,18 @@ func Save(ctx context.Context, db *sql.DB, state *AggregateState) error {
 	return nil
 }
 
-func writeAutoProjection(ctx context.Context, tx *sql.Tx, state *AggregateState) error {
-	ctx, span := tr.Start(ctx, "write_auto_projections")
-	defer span.End()
+func validateSequence(ctx context.Context, tx *sql.Tx, state *AggregateState) error {
 
-	if state.autoProjection == nil {
-		return nil
+	var dbSequence sql.NullInt64
+	if err := tx.QueryRowContext(ctx, "select max(sequence) from events where aggregate_id = ?", state.ID()).Scan(&dbSequence); err != nil {
+		if err != sql.ErrNoRows {
+			return err
+		}
 	}
 
-	view := state.autoProjection()
-	if view == nil {
-		return nil
-	}
-
-	viewType := reflect.TypeOf(view).Name()
-	viewJson, err := json.Marshal(view)
-	if err != nil {
-		return tracing.Error(span, err)
-	}
-
-	updateView := `
-		insert into auto_projections (aggregate_id, view_type, view)
-		values (?, ?, ?)
-		on conflict(aggregate_id)
-		do update set view=excluded.view`
-
-	if _, err := tx.ExecContext(ctx, updateView, state.ID(), viewType, viewJson); err != nil {
-		return tracing.Error(span, err)
+	memorySequence := Sequence(state)
+	if dbSequence.Valid && dbSequence.Int64 > int64(memorySequence) {
+		return fmt.Errorf("aggregate has new events in the database. db: %v, memory: %v", dbSequence, memorySequence)
 	}
 
 	return nil

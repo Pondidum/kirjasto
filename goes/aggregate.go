@@ -1,7 +1,9 @@
 package goes
 
 import (
+	"encoding/json"
 	"fmt"
+	"iter"
 	"reflect"
 	"time"
 
@@ -16,8 +18,7 @@ type AggregateState struct {
 
 	pendingEvents []EventDescriptor
 
-	eventFactory   map[string]func() any
-	autoProjection func() any
+	eventFactory map[string]func() any
 }
 
 func NewAggregateState() *AggregateState {
@@ -79,12 +80,6 @@ func Apply[TEvent any](state *AggregateState, event TEvent) error {
 	return nil
 }
 
-func RegisterAutoProjection[TView any](state *AggregateState, project func() TView) {
-	state.autoProjection = func() any {
-		return project()
-	}
-}
-
 func newEvent(state *AggregateState, eventType string) (any, error) {
 	if factory, found := state.eventFactory[eventType]; found {
 		return factory(), nil
@@ -113,20 +108,37 @@ type EventDescriptor struct {
 	Timestamp   time.Time
 	EventType   string
 	Event       any
+
+	marshalled []byte
 }
 
-func SaveEvents(state *AggregateState, write func(e EventDescriptor) error) error {
-
-	for _, event := range state.pendingEvents {
-		if err := write(event); err != nil {
-			return err
+func (e *EventDescriptor) Marshal() ([]byte, error) {
+	if len(e.marshalled) == 0 {
+		content, err := json.Marshal(e.Event)
+		if err != nil {
+			return nil, err
 		}
 
-		state.sequence = event.Sequence
+		e.marshalled = content
 	}
 
-	state.pendingEvents = nil
-	return nil
+	return e.marshalled, nil
+}
+
+func pendingEvents(state *AggregateState) iter.Seq[EventDescriptor] {
+	return func(yield func(e EventDescriptor) bool) {
+		lastSequence := state.sequence
+		for _, event := range state.pendingEvents {
+			if !yield(event) {
+				return
+			}
+
+			lastSequence = event.Sequence
+		}
+
+		state.sequence = lastSequence
+		state.pendingEvents = nil
+	}
 }
 
 func LoadEvents(state *AggregateState, events []EventDescriptor) error {
