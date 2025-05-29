@@ -24,6 +24,19 @@
       "program": "${workspaceFolder}",
       "args": ["import", ".data/openlibrary/ol_dump_authors_2025-02-11.txt"],
       "buildFlags": ["--tags", "fts5"]
+    },
+    {
+      "name": "import goodreads",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "args": [
+        "import",
+        "goodreads",
+        ".data/goodreads/goodreads_library_export.csv"
+      ],
+      "buildFlags": ["--tags", "fts5"]
     }
   ]
 }

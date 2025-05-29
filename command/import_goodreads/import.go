@@ -56,6 +56,8 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		return tracing.Error(span, err)
 	}
 
+	goes.RegisterProjection("library_view", storage.NewLibraryProjection())
+
 	library, err := storage.LoadLibrary(ctx, db, storage.LibraryID)
 	if err != nil {
 		if err != goes.ErrNotFound {
