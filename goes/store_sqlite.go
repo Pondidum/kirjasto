@@ -128,7 +128,7 @@ func Load(ctx context.Context, db *sql.DB, state *AggregateState, id uuid.UUID) 
 			return tracing.Error(span, err)
 		}
 
-		if e.Event, err = newEvent(state, e.EventType); err != nil {
+		if e.Event, err = newEvent(e.EventType); err != nil {
 			return tracing.Error(span, err)
 		}
 

@@ -17,15 +17,12 @@ type AggregateState struct {
 	handlers map[string]func(event any) error
 
 	pendingEvents []EventDescriptor
-
-	eventFactory map[string]func() any
 }
 
 func NewAggregateState() *AggregateState {
 	return &AggregateState{
-		sequence:     -1,
-		handlers:     map[string]func(event any) error{},
-		eventFactory: map[string]func() any{},
+		sequence: -1,
+		handlers: map[string]func(event any) error{},
 	}
 }
 
@@ -50,7 +47,7 @@ func Register[TEvent any](state *AggregateState, handler func(event TEvent)) {
 		return nil
 	}
 
-	state.eventFactory[name] = func() any {
+	eventFactory[name] = func() any {
 		return new(TEvent)
 	}
 }
@@ -78,14 +75,6 @@ func Apply[TEvent any](state *AggregateState, event TEvent) error {
 	state.pendingEvents = append(state.pendingEvents, descriptor)
 
 	return nil
-}
-
-func newEvent(state *AggregateState, eventType string) (any, error) {
-	if factory, found := state.eventFactory[eventType]; found {
-		return factory(), nil
-	}
-
-	return nil, fmt.Errorf("no factory for %s found", eventType)
 }
 
 ///
