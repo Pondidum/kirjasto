@@ -16,18 +16,40 @@ type viewDescriptor[TView any] struct {
 }
 
 func NewSqlProjection[TView any]() *SqlProjection[TView] {
+	name := reflect.TypeOf(*new(TView)).Name()
+
 	return &SqlProjection[TView]{
-		name:     reflect.TypeOf(*new(TView)).Name(),
 		cache:    map[uuid.UUID]*viewDescriptor[TView]{},
 		handlers: map[string]func(ctx context.Context, view *TView, event any) error{},
+
+		createTable: fmt.Sprintf(`
+			create table if not exists %s(
+				aggregate_id text primary key,
+				sequence integer not null,
+				view blob not null
+			);`, name),
+		getSequence: fmt.Sprintf(`
+			select sequence, view
+			from %s
+			where aggregate_id = @aggregate_id`, name),
+		updateView: fmt.Sprintf(`
+			insert into
+				%s (aggregate_id, sequence, view)
+				values (@aggregate_id, @sequence, @view)
+			on conflict(aggregate_id) do update set
+				sequence = @sequence,
+				view = @view`, name),
 	}
 }
 
 type SqlProjection[TView any] struct {
-	name     string
 	tx       *sql.Tx
 	cache    map[uuid.UUID]*viewDescriptor[TView]
 	handlers map[string]func(ctx context.Context, view *TView, event any) error
+
+	createTable string
+	getSequence string
+	updateView  string
 }
 
 func (p *SqlProjection[TView]) addHandler(name string, handler func(ctx context.Context, view *TView, event any) error) {
@@ -59,13 +81,7 @@ func (p *SqlProjection[TView]) Load(ctx context.Context, tx *sql.Tx) error {
 	clear(p.cache)
 
 	// create the table
-	_, err := tx.ExecContext(ctx, fmt.Sprintf(`
-create table if not exists %s(
-	aggregate_id text primary key,
-	sequence integer not null,
-	view blob not null
-);`, p.name))
-	if err != nil {
+	if _, err := tx.ExecContext(ctx, p.createTable); err != nil {
 		return err
 	}
 	return nil
@@ -78,7 +94,7 @@ func (p *SqlProjection[TView]) Project(ctx context.Context, event EventDescripto
 
 		// load
 		row := p.tx.QueryRowContext(ctx,
-			fmt.Sprintf(`select sequence, view from %s where aggregate_id = @aggregate_id`, p.name),
+			p.getSequence,
 			sql.Named("aggregate_id", event.AggregateID.String()),
 		)
 
@@ -114,28 +130,22 @@ func (p *SqlProjection[TView]) Project(ctx context.Context, event EventDescripto
 		return err
 	}
 
-	update := fmt.Sprintf(`
-	insert into
-		%s (aggregate_id, sequence, view)
-		values (@aggregate_id, @sequence, @view)
-	on conflict(aggregate_id) do update set
-		sequence = @sequence,
-		view = @view
-`, p.name)
-
 	// write to table
 	json, err := json.Marshal(vd.View)
 	if err != nil {
 		return err
 	}
 
-	_, err = p.tx.ExecContext(ctx, update,
+	_, err = p.tx.ExecContext(ctx, p.updateView,
 		sql.Named("aggregate_id", event.AggregateID.String()),
 		sql.Named("sequence", event.Sequence),
 		sql.Named("view", json),
 	)
-	return err
+	if err != nil {
+		return err
+	}
 
+	return nil
 }
 
 func (p *SqlProjection[TView]) Save(ctx context.Context, tx *sql.Tx) error {
