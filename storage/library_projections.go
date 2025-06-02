@@ -13,7 +13,7 @@ type LibraryProjection struct {
 	*goes.SqlProjection[LibraryView]
 }
 
-func NewLibraryProjection() goes.Projection {
+func NewLibraryProjection() *LibraryProjection {
 	projection := &LibraryProjection{
 		SqlProjection: goes.NewSqlProjection[LibraryView](),
 	}

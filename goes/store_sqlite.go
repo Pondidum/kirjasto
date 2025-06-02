@@ -3,11 +3,10 @@ package goes
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"iter"
 	"kirjasto/tracing"
-	"reflect"
 
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
@@ -17,7 +16,17 @@ import (
 var ErrNotFound = errors.New("aggregate does not exist")
 var tr = otel.Tracer("goes")
 
-func InitialiseStore(ctx context.Context, db *sql.DB) error {
+func NewSqliteStore(db *sql.DB) *SqliteStore {
+	return &SqliteStore{
+		db: db,
+	}
+}
+
+type SqliteStore struct {
+	db *sql.DB
+}
+
+func (s *SqliteStore) Initialise(ctx context.Context) error {
 	ctx, span := tr.Start(ctx, "initialise_store")
 	defer span.End()
 
@@ -38,24 +47,24 @@ create table if not exists auto_projections(
 	view text not null
 );`
 
-	if _, err := db.ExecContext(ctx, createTables); err != nil {
+	if _, err := s.db.ExecContext(ctx, createTables); err != nil {
 		return tracing.Error(span, err)
 	}
 
 	return nil
 }
 
-func Save(ctx context.Context, db *sql.DB, state *AggregateState) error {
+func (s *SqliteStore) Save(ctx context.Context, aggregateID uuid.UUID, sequence int, events []EventDescriptor) error {
 	ctx, span := tr.Start(ctx, "save")
 	defer span.End()
 
-	tx, err := db.BeginTx(ctx, nil)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return tracing.Error(span, err)
 	}
 	defer tx.Rollback()
 
-	if err := validateSequence(ctx, tx, state); err != nil {
+	if err := validateSequence(ctx, tx, aggregateID, sequence); err != nil {
 		return tracing.Error(span, err)
 	}
 
@@ -68,7 +77,7 @@ func Save(ctx context.Context, db *sql.DB, state *AggregateState) error {
 		return tracing.Error(span, err)
 	}
 
-	for event := range pendingEvents(state) {
+	for _, event := range events {
 		if err := writer.Write(ctx, event); err != nil {
 			return err
 		}
@@ -88,16 +97,15 @@ func Save(ctx context.Context, db *sql.DB, state *AggregateState) error {
 	return nil
 }
 
-func validateSequence(ctx context.Context, tx *sql.Tx, state *AggregateState) error {
+func validateSequence(ctx context.Context, tx *sql.Tx, aggregateID uuid.UUID, memorySequence int) error {
 
 	var dbSequence sql.NullInt64
-	if err := tx.QueryRowContext(ctx, "select max(sequence) from events where aggregate_id = ?", state.ID()).Scan(&dbSequence); err != nil {
+	if err := tx.QueryRowContext(ctx, "select max(sequence) from events where aggregate_id = ?", aggregateID).Scan(&dbSequence); err != nil {
 		if err != sql.ErrNoRows {
 			return err
 		}
 	}
 
-	memorySequence := Sequence(state)
 	if dbSequence.Valid && dbSequence.Int64 > int64(memorySequence) {
 		return fmt.Errorf("aggregate has new events in the database. db: %v, memory: %v", dbSequence, memorySequence)
 	}
@@ -105,82 +113,122 @@ func validateSequence(ctx context.Context, tx *sql.Tx, state *AggregateState) er
 	return nil
 }
 
-func Load(ctx context.Context, db *sql.DB, state *AggregateState, id uuid.UUID) error {
-	ctx, span := tr.Start(ctx, "load")
+func (s *SqliteStore) Load(ctx context.Context, aggregateID uuid.UUID) iter.Seq2[EventDescriptor, error] {
+	return func(yield func(EventDescriptor, error) bool) {
+
+		rows, err := s.db.QueryContext(ctx, `
+			select sequence, timestamp, event_type, event_data
+			from events
+			where aggregate_id = @aggregate_id
+			order by sequence asc
+		`, sql.Named("aggregate_id", aggregateID.String()))
+		if err != nil {
+			if !yield(EventDescriptor{}, err) {
+				return
+			}
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+
+			e := EventDescriptor{
+				AggregateID: aggregateID,
+			}
+
+			var eventJson []byte
+
+			if err := rows.Scan(&e.Sequence, &e.Timestamp, &e.EventType, &eventJson); err != nil {
+				if !yield(e, err) {
+					return
+				}
+			}
+
+			if e.Event, err = eventFromJson(e.EventType, eventJson); err != nil {
+				if !yield(e, err) {
+					return
+				}
+			}
+
+			if !yield(e, nil) {
+				return
+			}
+		}
+
+	}
+}
+
+func (s *SqliteStore) allEvents(ctx context.Context, tx *sql.Tx) iter.Seq2[EventDescriptor, error] {
+	return func(yield func(EventDescriptor, error) bool) {
+
+		rows, err := tx.QueryContext(ctx, `
+			select aggregate_id, sequence, timestamp, event_type, event_data
+			from events
+			order by event_id asc
+		`)
+		if err != nil {
+			if !yield(EventDescriptor{}, err) {
+				return
+			}
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+
+			e := EventDescriptor{}
+
+			var eventJson []byte
+			if err := rows.Scan(&e.AggregateID, &e.Sequence, &e.Timestamp, &e.EventType, &eventJson); err != nil {
+				if !yield(e, err) {
+					return
+				}
+			}
+
+			if e.Event, err = eventFromJson(e.EventType, eventJson); err != nil {
+				if !yield(e, err) {
+					return
+				}
+			}
+
+			if !yield(e, nil) {
+				return
+			}
+		}
+	}
+}
+
+func (s *SqliteStore) Rebuild(ctx context.Context, projection Projection) error {
+	ctx, span := tr.Start(ctx, "rebuild")
 	defer span.End()
 
-	rows, err := db.QueryContext(ctx, "select sequence, timestamp, event_type, event_data from events where aggregate_id = ?", id)
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{})
 	if err != nil {
 		return tracing.Error(span, err)
 	}
-	defer rows.Close()
+	defer tx.Rollback()
 
-	events := []EventDescriptor{}
-	for rows.Next() {
-
-		e := EventDescriptor{
-			AggregateID: state.ID(),
-		}
-
-		var eventJson []byte
-
-		if err := rows.Scan(&e.Sequence, &e.Timestamp, &e.EventType, &eventJson); err != nil {
-			return tracing.Error(span, err)
-		}
-
-		if e.Event, err = newEvent(e.EventType); err != nil {
-			return tracing.Error(span, err)
-		}
-
-		if err := json.Unmarshal(eventJson, &e.Event); err != nil {
-			return tracing.Error(span, err)
-		}
-
-		events = append(events, e)
-	}
-
-	if len(events) == 0 {
-		return tracing.Error(span, ErrNotFound)
-	}
-
-	return LoadEvents(state, events)
-}
-
-func ViewById(ctx context.Context, db *sql.DB, aggregateID uuid.UUID, view any) error {
-	ctx, span := tr.Start(ctx, "view_by_id")
-	defer span.End()
-
-	query := `select view from auto_projections where aggregate_id = ?`
-	viewJson := ""
-
-	if err := db.QueryRowContext(ctx, query, aggregateID).Scan(&viewJson); err != nil {
+	if err := projection.Load(ctx, tx); err != nil {
 		return tracing.Error(span, err)
 	}
 
-	if err := json.Unmarshal([]byte(viewJson), &view); err != nil {
+	if err := projection.Wipe(ctx); err != nil {
 		return tracing.Error(span, err)
 	}
 
-	return nil
-}
+	for event, err := range s.allEvents(ctx, tx) {
+		if err != nil {
+			return tracing.Error(span, err)
+		}
 
-func ViewByProperty(ctx context.Context, db *sql.DB, path string, value any, view any) error {
-	ctx, span := tr.Start(ctx, "view_by_property")
-	defer span.End()
-
-	viewType := reflect.TypeOf(view).Name()
-	if viewType == "" {
-		viewType = reflect.TypeOf(view).Elem().Name()
+		if err := projection.Project(ctx, event); err != nil {
+			return tracing.Error(span, err)
+		}
 	}
 
-	query := `select view from auto_projections where view_type = ? and view ->> ? = ?`
-	viewJson := ""
-
-	if err := db.QueryRowContext(ctx, query, viewType, path, value).Scan(&viewJson); err != nil {
+	if err := projection.Save(ctx, tx); err != nil {
 		return tracing.Error(span, err)
 	}
 
-	if err := json.Unmarshal([]byte(viewJson), &view); err != nil {
+	if err := tx.Commit(); err != nil {
 		return tracing.Error(span, err)
 	}
 

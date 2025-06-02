@@ -3,7 +3,6 @@ package goes
 import (
 	"encoding/json"
 	"fmt"
-	"iter"
 	"reflect"
 	"time"
 
@@ -114,36 +113,16 @@ func (e *EventDescriptor) Marshal() ([]byte, error) {
 	return e.marshalled, nil
 }
 
-func pendingEvents(state *AggregateState) iter.Seq[EventDescriptor] {
-	return func(yield func(e EventDescriptor) bool) {
-		lastSequence := state.sequence
-		for _, event := range state.pendingEvents {
-			if !yield(event) {
-				return
-			}
-
-			lastSequence = event.Sequence
-		}
-
-		state.sequence = lastSequence
-		state.pendingEvents = nil
-	}
-}
-
-func LoadEvents(state *AggregateState, events []EventDescriptor) error {
-	for _, e := range events {
-
-		handler, found := state.handlers[e.EventType]
-		if !found {
-			return fmt.Errorf("no handler registered for %s", e.EventType)
-		}
-
-		if err := handler(e.Event); err != nil {
-			return err
-		}
-
-		state.sequence = e.Sequence
+func (a *AggregateState) ReplayEvent(event EventDescriptor) error {
+	handler, found := a.handlers[event.EventType]
+	if !found {
+		return fmt.Errorf("no handler registered for %s", event.EventType)
 	}
 
+	if err := handler(event.Event); err != nil {
+		return err
+	}
+
+	a.sequence = event.Sequence
 	return nil
 }

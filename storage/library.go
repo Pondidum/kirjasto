@@ -2,7 +2,6 @@ package storage
 
 import (
 	"context"
-	"database/sql"
 	"kirjasto/goes"
 	"kirjasto/tracing"
 	"time"
@@ -34,21 +33,22 @@ func NewLibrary(id uuid.UUID) *Library {
 	return library
 }
 
-func LoadLibrary(ctx context.Context, db *sql.DB, id uuid.UUID) (*Library, error) {
+func LoadLibrary(ctx context.Context, eventStore *goes.SqliteStore, id uuid.UUID) (*Library, error) {
 	ctx, span := tr.Start(ctx, "load_library")
 	defer span.End()
 
 	library := blankLibrary()
+	goes.SetID(library.state, id)
 
-	if err := goes.Load(ctx, db, library.state, id); err != nil {
+	if err := goes.Load(ctx, eventStore, library.state); err != nil {
 		return nil, tracing.Error(span, err)
 	}
 
 	return library, nil
 }
 
-func SaveLibrary(ctx context.Context, db *sql.DB, library *Library) error {
-	return goes.Save(ctx, db, library.state)
+func SaveLibrary(ctx context.Context, eventStore *goes.SqliteStore, library *Library) error {
+	return goes.Save(ctx, eventStore, library.state)
 }
 
 type Library struct {

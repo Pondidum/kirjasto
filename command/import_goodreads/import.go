@@ -52,7 +52,8 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		return tracing.Error(span, err)
 	}
 
-	if err := goes.InitialiseStore(ctx, db); err != nil {
+	eventStore := goes.NewSqliteStore(db)
+	if err := eventStore.Initialise(ctx); err != nil {
 		return tracing.Error(span, err)
 	}
 
@@ -60,7 +61,7 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		return tracing.Error(span, err)
 	}
 
-	library, err := storage.LoadLibrary(ctx, db, storage.LibraryID)
+	library, err := storage.LoadLibrary(ctx, eventStore, storage.LibraryID)
 	if err != nil {
 		if err != goes.ErrNotFound {
 			return tracing.Error(span, err)
@@ -99,7 +100,7 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 
 	span.SetAttributes(attribute.Int("csv.lines", lines))
 
-	if err := storage.SaveLibrary(ctx, db, library); err != nil {
+	if err := storage.SaveLibrary(ctx, eventStore, library); err != nil {
 		return tracing.Error(span, err)
 	}
 
