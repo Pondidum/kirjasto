@@ -37,6 +37,15 @@
         ".data/goodreads/goodreads_library_export.csv"
       ],
       "buildFlags": ["--tags", "fts5"]
+    },
+    {
+      "name": "goes rebuild views",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}",
+      "args": ["goes", "rebuild", "views"],
+      "buildFlags": ["--tags", "fts5"]
     }
   ]
 }

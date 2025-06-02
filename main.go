@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"kirjasto/command"
+	"kirjasto/command/goes"
 	"kirjasto/command/import_goodreads"
 	"kirjasto/command/import_openlibrary"
 	"kirjasto/command/server"
@@ -19,6 +20,8 @@ func main() {
 		"server":             command.NewCommand(server.NewServerCommand()),
 		"import openlibrary": command.NewCommand(import_openlibrary.NewImportCommand()),
 		"import goodreads":   command.NewCommand(import_goodreads.NewImportCommand()),
+
+		"goes rebuild views": command.NewCommand(goes.NewGoesCommand()),
 	}
 
 	cli := &cli.CLI{
