@@ -11,8 +11,8 @@ import (
 )
 
 type viewDescriptor[TView any] struct {
-	Sequence int64
-	View     *TView
+	AggregateID uuid.UUID
+	View        *TView
 }
 
 func NewSqlProjection[TView any]() *SqlProjection[TView] {
@@ -25,20 +25,21 @@ func NewSqlProjection[TView any]() *SqlProjection[TView] {
 		createTable: fmt.Sprintf(`
 			create table if not exists %s(
 				aggregate_id text primary key,
-				sequence integer not null,
 				view blob not null
 			);`, name),
 		getSequence: fmt.Sprintf(`
-			select sequence, view
+			select view
 			from %s
 			where aggregate_id = @aggregate_id`, name),
 		updateView: fmt.Sprintf(`
 			insert into
-				%s (aggregate_id, sequence, view)
-				values (@aggregate_id, @sequence, @view)
+				%s (aggregate_id, view)
+				values (@aggregate_id, @view)
 			on conflict(aggregate_id) do update set
-				sequence = @sequence,
 				view = @view`, name),
+		deleteAllViews: fmt.Sprintf(`
+			delete
+			from %s`, name),
 	}
 }
 
@@ -47,9 +48,10 @@ type SqlProjection[TView any] struct {
 	cache    map[uuid.UUID]*viewDescriptor[TView]
 	handlers map[string]func(ctx context.Context, view *TView, event any) error
 
-	createTable string
-	getSequence string
-	updateView  string
+	createTable    string
+	getSequence    string
+	updateView     string
+	deleteAllViews string
 }
 
 func (p *SqlProjection[TView]) addHandler(name string, handler func(ctx context.Context, view *TView, event any) error) {
@@ -114,8 +116,8 @@ func (p *SqlProjection[TView]) Project(ctx context.Context, event EventDescripto
 		}
 
 		vd = &viewDescriptor[TView]{
-			Sequence: sequence,
-			View:     view,
+			AggregateID: event.AggregateID,
+			View:        view,
 		}
 		p.cache[event.AggregateID] = vd
 	}
@@ -130,26 +132,39 @@ func (p *SqlProjection[TView]) Project(ctx context.Context, event EventDescripto
 		return err
 	}
 
-	// write to table
-	json, err := json.Marshal(vd.View)
-	if err != nil {
-		return err
-	}
-
-	_, err = p.tx.ExecContext(ctx, p.updateView,
-		sql.Named("aggregate_id", event.AggregateID.String()),
-		sql.Named("sequence", event.Sequence),
-		sql.Named("view", json),
-	)
-	if err != nil {
-		return err
-	}
-
 	return nil
 }
 
 func (p *SqlProjection[TView]) Save(ctx context.Context, tx *sql.Tx) error {
+
+	for _, vd := range p.cache {
+
+		json, err := json.Marshal(vd.View)
+		if err != nil {
+			return err
+		}
+
+		_, err = p.tx.ExecContext(ctx, p.updateView,
+			sql.Named("aggregate_id", vd.AggregateID.String()),
+			sql.Named("view", json),
+		)
+		if err != nil {
+			return err
+		}
+
+	}
+
 	clear(p.cache)
 	p.tx = nil
+	return nil
+}
+
+func (p *SqlProjection[TView]) Wipe(ctx context.Context) error {
+
+	_, err := p.tx.ExecContext(ctx, p.deleteAllViews)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
