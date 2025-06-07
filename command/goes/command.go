@@ -3,6 +3,7 @@ package goes
 import (
 	"context"
 	"kirjasto/config"
+	"kirjasto/domain"
 	"kirjasto/goes"
 	"kirjasto/storage"
 	"kirjasto/tracing"
@@ -43,7 +44,7 @@ func (c *GoesProjectionCommand) Execute(ctx context.Context, config *config.Conf
 		return tracing.Error(span, err)
 	}
 
-	projection := storage.NewLibraryProjection()
+	projection := domain.NewLibraryProjection()
 	if err := goes.RegisterProjection("library_view", projection); err != nil {
 		return tracing.Error(span, err)
 	}

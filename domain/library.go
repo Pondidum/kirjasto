@@ -1,4 +1,4 @@
-package storage
+package domain
 
 import (
 	"context"
@@ -7,7 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
 )
+
+var tr = otel.Tracer("domain")
 
 var LibraryID uuid.UUID = uuid.MustParse("89ea74d8-1960-41cc-b795-2d843f02c0aa")
 

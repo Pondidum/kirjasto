@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"kirjasto/config"
+	"kirjasto/domain"
 	"kirjasto/goes"
 	"kirjasto/storage"
 	"kirjasto/tracing"
@@ -57,16 +58,16 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		return tracing.Error(span, err)
 	}
 
-	if err := goes.RegisterProjection("library_view", storage.NewLibraryProjection()); err != nil {
+	if err := goes.RegisterProjection("library_view", domain.NewLibraryProjection()); err != nil {
 		return tracing.Error(span, err)
 	}
 
-	library, err := storage.LoadLibrary(ctx, eventStore, storage.LibraryID)
+	library, err := domain.LoadLibrary(ctx, eventStore, domain.LibraryID)
 	if err != nil {
 		if err != goes.ErrNotFound {
 			return tracing.Error(span, err)
 		}
-		library = storage.NewLibrary(storage.LibraryID)
+		library = domain.NewLibrary(domain.LibraryID)
 	}
 
 	file, err := os.Open(filePath)
@@ -100,14 +101,14 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 
 	span.SetAttributes(attribute.Int("csv.lines", lines))
 
-	if err := storage.SaveLibrary(ctx, eventStore, library); err != nil {
+	if err := domain.SaveLibrary(ctx, eventStore, library); err != nil {
 		return tracing.Error(span, err)
 	}
 
 	return nil
 }
 
-func asBookImport(span trace.Span, line []string) storage.BookImport {
+func asBookImport(span trace.Span, line []string) domain.BookImport {
 	isbns := make([]string, 0, 2)
 	if isbn := line[fieldISBN13]; isbn != "" && isbn != `=""` {
 		isbns = append(isbns, strings.TrimSuffix(strings.TrimPrefix(isbn, `="`), `"`))
@@ -165,7 +166,7 @@ func asBookImport(span trace.Span, line []string) storage.BookImport {
 		}
 	}
 
-	return storage.BookImport{
+	return domain.BookImport{
 		Isbns:     isbns,
 		Rating:    rating,
 		ReadCount: readCount,
