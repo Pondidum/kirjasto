@@ -87,6 +87,45 @@ func GetBookByID(ctx context.Context, reader *sql.DB, id string) (*Book, error) 
 
 }
 
+type Readable interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+func FindBooksByIsbn(ctx context.Context, reader Readable, isbn string) ([]*Book, error) {
+	ctx, span := tr.Start(ctx, "find_book_by_isbn")
+	defer span.End()
+
+	query := `
+		select
+			e.data,
+			(
+				select json_group_array(json(a.data))
+				from editions_authors_link eal
+				join authors a on a.id = eal.author_id
+				where eal.edition_id  = e.id
+			)
+		from editions e
+		join editions_isbns_link eil on eil.edition_id = e.id
+		where eil.isbn = @isbn
+	`
+
+	rows, err := reader.QueryContext(ctx, query, sql.Named("isbn", isbn))
+	if err != nil {
+		return nil, tracing.Error(span, err)
+	}
+
+	books, err := buildBooks(ctx, rows)
+	if err != nil {
+		return nil, tracing.Error(span, err)
+	}
+
+	results := make([]*Book, len(books))
+	for _, book := range books {
+		results[book.rank] = book
+	}
+	return results, nil
+}
+
 func FindBooks(ctx context.Context, reader *sql.DB, search string) ([]*Book, error) {
 	ctx, span := tr.Start(ctx, "find_books")
 	defer span.End()

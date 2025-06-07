@@ -3,10 +3,13 @@ package domain
 import (
 	"context"
 	"kirjasto/goes"
+	"kirjasto/openlibrary"
+	"slices"
 )
 
 type LibraryView struct {
 	Shelves map[string]struct{}
+	Books   []*openlibrary.Book
 }
 
 type LibraryProjection struct {
@@ -32,6 +35,25 @@ func (p *LibraryProjection) onLibraryCreated(ctx context.Context, view *LibraryV
 func (p *LibraryProjection) onBookImported(ctx context.Context, view *LibraryView, event BookImported) error {
 	for _, shelf := range event.Shelves {
 		view.Shelves[shelf] = struct{}{}
+	}
+
+	// prefer longer isbns
+	slices.SortFunc(event.Isbns, func(a, b string) int {
+		return len(b) - len(a)
+	})
+
+	for _, isbn := range event.Isbns {
+		books, err := openlibrary.FindBooksByIsbn(ctx, p.Tx, isbn)
+		if err != nil {
+			return err
+		}
+
+		if len(books) == 0 {
+			continue
+		}
+
+		view.Books = append(view.Books, books[0])
+		break
 	}
 
 	return nil

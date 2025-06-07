@@ -44,7 +44,7 @@ func NewSqlProjection[TView any]() *SqlProjection[TView] {
 }
 
 type SqlProjection[TView any] struct {
-	tx       *sql.Tx
+	Tx       *sql.Tx
 	cache    map[uuid.UUID]*viewDescriptor[TView]
 	handlers map[string]func(ctx context.Context, view *TView, event any) error
 
@@ -79,7 +79,7 @@ func AddProjectionHandler[TView any, TEvent any](p *SqlProjection[TView], projec
 }
 
 func (p *SqlProjection[TView]) Load(ctx context.Context, tx *sql.Tx) error {
-	p.tx = tx
+	p.Tx = tx
 	clear(p.cache)
 
 	// create the table
@@ -95,19 +95,18 @@ func (p *SqlProjection[TView]) Project(ctx context.Context, event EventDescripto
 	if !found {
 
 		// load
-		row := p.tx.QueryRowContext(ctx,
+		row := p.Tx.QueryRowContext(ctx,
 			p.readView,
 			sql.Named("aggregate_id", event.AggregateID.String()),
 		)
 
 		var viewJson []byte
-		var view *TView
+		view := new(TView)
 
 		if err := row.Scan(&viewJson); err != nil {
 			if err != sql.ErrNoRows {
 				return err
 			}
-			view = new(TView)
 		} else {
 			if err := json.Unmarshal(viewJson, view); err != nil {
 				return err
@@ -143,7 +142,7 @@ func (p *SqlProjection[TView]) Save(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 
-		_, err = p.tx.ExecContext(ctx, p.updateView,
+		_, err = p.Tx.ExecContext(ctx, p.updateView,
 			sql.Named("aggregate_id", vd.AggregateID.String()),
 			sql.Named("view", json),
 		)
@@ -154,16 +153,40 @@ func (p *SqlProjection[TView]) Save(ctx context.Context, tx *sql.Tx) error {
 	}
 
 	clear(p.cache)
-	p.tx = nil
+	p.Tx = nil
 	return nil
 }
 
 func (p *SqlProjection[TView]) Wipe(ctx context.Context) error {
 
-	_, err := p.tx.ExecContext(ctx, p.deleteAllViews)
+	_, err := p.Tx.ExecContext(ctx, p.deleteAllViews)
 	if err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (p *SqlProjection[TView]) View(ctx context.Context, reader Readable, aggregateID uuid.UUID) (*TView, error) {
+
+	row := reader.QueryRowContext(ctx,
+		p.readView,
+		sql.Named("aggregate_id", aggregateID.String()),
+	)
+
+	var viewJson []byte
+	view := new(TView)
+
+	if err := row.Scan(&viewJson); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(viewJson, view); err != nil {
+		return nil, err
+	}
+
+	return view, nil
+}
+
+type Readable interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
