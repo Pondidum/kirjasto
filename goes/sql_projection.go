@@ -27,7 +27,7 @@ func NewSqlProjection[TView any]() *SqlProjection[TView] {
 				aggregate_id text primary key,
 				view blob not null
 			);`, name),
-		getSequence: fmt.Sprintf(`
+		readView: fmt.Sprintf(`
 			select view
 			from %s
 			where aggregate_id = @aggregate_id`, name),
@@ -49,7 +49,7 @@ type SqlProjection[TView any] struct {
 	handlers map[string]func(ctx context.Context, view *TView, event any) error
 
 	createTable    string
-	getSequence    string
+	readView       string
 	updateView     string
 	deleteAllViews string
 }
@@ -96,15 +96,14 @@ func (p *SqlProjection[TView]) Project(ctx context.Context, event EventDescripto
 
 		// load
 		row := p.tx.QueryRowContext(ctx,
-			p.getSequence,
+			p.readView,
 			sql.Named("aggregate_id", event.AggregateID.String()),
 		)
 
-		var sequence int64
 		var viewJson []byte
 		var view *TView
 
-		if err := row.Scan(&sequence, &viewJson); err != nil {
+		if err := row.Scan(&viewJson); err != nil {
 			if err != sql.ErrNoRows {
 				return err
 			}
