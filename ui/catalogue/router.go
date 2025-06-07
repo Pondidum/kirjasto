@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"kirjasto/config"
+	"kirjasto/openlibrary"
 	"kirjasto/routing"
 	"kirjasto/storage"
 	"kirjasto/template"
@@ -38,7 +39,7 @@ func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.Serv
 
 		if query, found := form["query"]; found {
 
-			books, err := storage.FindBooks(ctx, reader, query)
+			books, err := openlibrary.FindBooks(ctx, reader, query)
 			if err != nil {
 				return err
 			}
@@ -63,7 +64,7 @@ func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.Serv
 			return tracing.Error(span, err)
 		}
 
-		book, err := storage.GetBookByID(ctx, reader, r.PathValue("id"))
+		book, err := openlibrary.GetBookByID(ctx, reader, r.PathValue("id"))
 		if err != nil {
 			return tracing.Error(span, err)
 		}
@@ -84,7 +85,7 @@ func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.Serv
 			return tracing.Error(span, err)
 		}
 
-		book, err := storage.GetBookByID(ctx, reader, r.PathValue("id"))
+		book, err := openlibrary.GetBookByID(ctx, reader, r.PathValue("id"))
 		if err != nil {
 			return tracing.Error(span, err)
 		}

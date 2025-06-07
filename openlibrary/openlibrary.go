@@ -1,4 +1,4 @@
-package storage
+package openlibrary
 
 import (
 	"context"
@@ -10,8 +10,11 @@ import (
 	"slices"
 	"time"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
+
+var tr = otel.Tracer("openlibrary")
 
 type Book struct {
 	ID       string

@@ -1,7 +1,8 @@
-package storage
+package openlibrary
 
 import (
 	"context"
+	"kirjasto/storage"
 	"slices"
 	"testing"
 
@@ -10,7 +11,7 @@ import (
 
 func TestFindingBooks(t *testing.T) {
 	ctx := context.Background()
-	reader, err := Reader(ctx, "../dev.sqlite")
+	reader, err := storage.Reader(ctx, "../dev.sqlite")
 	require.NoError(t, err)
 
 	books, err := FindBooks(ctx, reader, "rogue heroes")
