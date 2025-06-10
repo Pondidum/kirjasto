@@ -5,34 +5,19 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"iter"
 	"kirjasto/tracing"
-	"path"
 	"slices"
 	"time"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var tr = otel.Tracer("openlibrary")
 
 type Book struct {
-	ID       string
-	Editions []*Edition
-
-	rank     int
-	editions map[string]*Edition
-}
-
-func (b *Book) Edition(isbn string) *Edition {
-	if e, found := b.editions[isbn]; found {
-		return e
-	}
-
-	return nil
-}
-
-type Edition struct {
 	Isbns []string
 
 	Title    string
@@ -40,7 +25,11 @@ type Edition struct {
 	Authors  []Author
 	Covers   []int // ??
 
-	PublishDate time.Time
+	PublishDate *time.Time
+
+	OtherEditions  []*Book
+	rank           int
+	openLibraryKey string
 }
 
 type Author struct {
@@ -48,44 +37,39 @@ type Author struct {
 	Name string
 }
 
-func GetBookByID(ctx context.Context, reader *sql.DB, id string) (*Book, error) {
-	ctx, span := tr.Start(ctx, "get_book_by_id")
-	defer span.End()
+// func GetBookByID(ctx context.Context, reader *sql.DB, id string) (*Book, error) {
+// 	ctx, span := tr.Start(ctx, "get_book_by_id")
+// 	defer span.End()
 
-	span.SetAttributes(attribute.String("book.id", id))
+// 	span.SetAttributes(attribute.String("book.id", id))
 
-	workId := fmt.Sprintf("/works/%s", id)
-	query := `
-		select
-			e.data,
-			(
-				select json_group_array(json(a.data))
-				from editions_authors_link eal
-				join authors a on a.id = eal.author_id
-				where eal.edition_id  = e.id
-			)
-		from editions e
-		join editions_works_link ewl on e.id = ewl.edition_id
-		where ewl.work_id  = @id
-	`
+// 	workId := fmt.Sprintf("/works/%s", id)
+// 	query := `
+// 		select
+// 			e.data,
+// 			(
+// 				select json_group_array(json(a.data))
+// 				from editions_authors_link eal
+// 				join authors a on a.id = eal.author_id
+// 				where eal.edition_id  = e.id
+// 			)
+// 		from editions e
+// 		join editions_works_link ewl on e.id = ewl.edition_id
+// 		where ewl.work_id  = @id
+// 	`
 
-	rows, err := reader.QueryContext(ctx, query, sql.Named("id", workId))
-	if err != nil {
-		return nil, tracing.Error(span, err)
-	}
+// 	rows, err := reader.QueryContext(ctx, query, sql.Named("id", workId))
+// 	if err != nil {
+// 		return nil, tracing.Error(span, err)
+// 	}
 
-	books, err := buildBooks(ctx, rows)
-	if err != nil {
-		return nil, tracing.Error(span, err)
-	}
+// 	results := bookResultRows(rows)
+// 	books, err := buildResults(ctx, results)
+// 	if err != nil {
+// 		return nil, tracing.Error(span, err)
+// 	}
 
-	if book, found := books[id]; found {
-		return book, nil
-	}
-
-	return nil, nil
-
-}
+// }
 
 type Readable interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
@@ -114,16 +98,13 @@ func FindBooksByIsbn(ctx context.Context, reader Readable, isbn string) ([]*Book
 		return nil, tracing.Error(span, err)
 	}
 
-	books, err := buildBooks(ctx, rows)
+	results := bookResultRows(rows)
+	books, err := buildResults(ctx, results)
 	if err != nil {
 		return nil, tracing.Error(span, err)
 	}
 
-	results := make([]*Book, len(books))
-	for _, book := range books {
-		results[book.rank] = book
-	}
-	return results, nil
+	return books, nil
 }
 
 func FindBooks(ctx context.Context, reader *sql.DB, search string) ([]*Book, error) {
@@ -151,90 +132,122 @@ func FindBooks(ctx context.Context, reader *sql.DB, search string) ([]*Book, err
 		return nil, tracing.Error(span, err)
 	}
 
-	books, err := buildBooks(ctx, rows)
+	results := bookResultRows(rows)
+	books, err := buildResults(ctx, results)
 	if err != nil {
 		return nil, tracing.Error(span, err)
-	}
-
-	results := make([]*Book, len(books))
-	for _, book := range books {
-		results[book.rank] = book
-	}
-	return results, nil
-}
-
-func buildBooks(ctx context.Context, rows *sql.Rows) (map[string]*Book, error) {
-	ctx, span := tr.Start(ctx, "build_books")
-	defer span.End()
-
-	books := map[string]*Book{}
-
-	rank := 0
-	for rows.Next() {
-		if err := rows.Err(); err != nil {
-			return nil, tracing.Error(span, err)
-		}
-
-		editionJson := ""
-		authorJson := ""
-
-		if err := rows.Scan(&editionJson, &authorJson); err != nil {
-			return nil, tracing.Error(span, err)
-		}
-
-		editionDto := editionDto{}
-		if err := json.Unmarshal([]byte(editionJson), &editionDto); err != nil {
-			return nil, tracing.Error(span, err)
-		}
-
-		authors := []authorDto{}
-		if err := json.Unmarshal([]byte(authorJson), &authors); err != nil {
-			return nil, tracing.Error(span, err)
-		}
-
-		edition := &Edition{
-			Title:    editionDto.Title,
-			Subtitle: editionDto.Subtitle,
-			Isbns:    append(editionDto.Isbn10, editionDto.Isbn13...),
-			Authors:  authorsFromJson(authors),
-		}
-
-		for _, w := range editionDto.Works {
-			bookId := path.Base(w.Key)
-			book, exists := books[bookId]
-			if !exists {
-				book = &Book{
-					ID:       bookId,
-					rank:     rank,
-					editions: map[string]*Edition{},
-				}
-				books[book.ID] = book
-				rank++
-			}
-
-			book.Editions = append(book.Editions, edition)
-			for _, isbn := range edition.Isbns {
-				book.editions[isbn] = edition
-			}
-
-			books[book.ID] = book
-		}
-	}
-
-	for _, book := range books {
-		slices.SortFunc(book.Editions, func(a, b *Edition) int {
-			if a.PublishDate.Before(b.PublishDate) {
-				return -1
-			} else {
-				return 1
-			}
-		})
 	}
 
 	return books, nil
 }
 
-func authorsFromJson(dto []authorDto) []Author {
+func bookResultRows(rows *sql.Rows) iter.Seq[bookResult] {
+	return func(yield func(bookResult) bool) {
+
+		var editionJson string
+		var authorJson string
+
+		for rows.Next() {
+			err := rows.Scan(&editionJson, &authorJson)
+
+			if !yield(bookResult{editionJson, authorJson, err}) {
+				break
+			}
+		}
+	}
+}
+
+type bookResult struct {
+	editionJson string
+	authorJson  string
+	err         error
+}
+
+func buildResults(ctx context.Context, rows iter.Seq[bookResult]) ([]*Book, error) {
+	ctx, span := tr.Start(ctx, "build_results")
+	defer span.End()
+
+	groups := map[string][]*Book{}
+
+	rank := -1
+
+	for bookRow := range rows {
+		if bookRow.err != nil {
+			return nil, tracing.Error(span, bookRow.err)
+		}
+
+		rank++
+
+		authors, err := authorsFromJson(bookRow.authorJson)
+		if err != nil {
+			return nil, tracing.Error(span, err)
+		}
+
+		editionDto := editionDto{}
+		if err := json.Unmarshal([]byte(bookRow.editionJson), &editionDto); err != nil {
+			return nil, tracing.Error(span, err)
+		}
+
+		for _, work := range editionDto.Works {
+
+			book := &Book{
+				Title:          editionDto.Title,
+				Subtitle:       editionDto.Subtitle,
+				Isbns:          append(editionDto.Isbn13, editionDto.Isbn10...),
+				Authors:        authors,
+				Covers:         editionDto.Covers,
+				rank:           rank,
+				openLibraryKey: editionDto.Key,
+			}
+
+			if publishDate, err := parsePublishDate(editionDto.PublishDate); err == nil {
+				book.PublishDate = &publishDate
+			} else {
+				span.AddEvent("date_parsing_failed", trace.WithAttributes(
+					attribute.String("edition.publish_date", editionDto.PublishDate),
+				))
+			}
+
+			groups[work.Key] = append(groups[work.Key], book)
+		}
+
+	}
+
+	books := make([]*Book, 0, len(groups))
+
+	for _, group := range groups {
+
+		slices.SortFunc(group, func(a, b *Book) int { return a.rank - b.rank })
+		main := group[0]
+		main.OtherEditions = group[1:]
+
+		books = append(books, main)
+	}
+
+	slices.SortFunc(books, func(a, b *Book) int { return a.rank - b.rank })
+
+	return books, nil
+}
+
+func parsePublishDate(publishDate string) (time.Time, error) {
+
+	if parsed, err := time.Parse("Jan _2, 2006", publishDate); err == nil {
+		return parsed, nil
+	}
+
+	if parsed, err := time.Parse("2006", publishDate); err == nil {
+		return parsed, nil
+	}
+
+	return time.Time{}, fmt.Errorf("No format matched for '%s'", publishDate)
+}
+
+func authorsFromJson(authorJson string) ([]Author, error) {
+
+	dto := []authorDto{}
+	if err := json.Unmarshal([]byte(authorJson), &dto); err != nil {
+		return nil, err
+	}
 
 	authors := make([]Author, len(dto))
 	for i, src := range dto {
@@ -243,7 +256,7 @@ func authorsFromJson(dto []authorDto) []Author {
 			Name: src.Name,
 		}
 	}
-	return authors
+	return authors, nil
 }
 
 type editionDto struct {
@@ -253,12 +266,13 @@ type editionDto struct {
 	Subtitle       string
 	PhysicalFormat string `json:"physical_format"`
 
-	PublishDate string `json:"publish_data"`
+	PublishDate string `json:"publish_date"`
 
 	Isbn10 []string `json:"isbn_10"`
 	Isbn13 []string `json:"isbn_13"`
 
-	Works []workDto
+	Covers []int
+	Works  []workDto
 }
 
 type authorDto struct {

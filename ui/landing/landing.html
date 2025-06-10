@@ -32,9 +32,9 @@
 </form>
 
 <ol>
-  {{- range $i, $book := .Books }}
+  {{- range $i, $book := .Library.Books }}
   <li>
-    <h3>{{ $book.Name }}</h3>
+    <h3>{{ $book.Title }}</h3>
   </li>
   {{- end }}
 </ol>

@@ -2,13 +2,11 @@ package catalogue
 
 import (
 	"context"
-	"fmt"
 	"kirjasto/config"
 	"kirjasto/openlibrary"
 	"kirjasto/routing"
 	"kirjasto/storage"
 	"kirjasto/template"
-	"kirjasto/tracing"
 	"net/http"
 
 	"go.opentelemetry.io/otel"
@@ -55,46 +53,25 @@ func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.Serv
 		return nil
 	}))
 
-	mux.HandleFunc("GET /catalogue/books/{id}", routing.RouteHandler(func(w http.ResponseWriter, r *http.Request) error {
-		ctx, span := tr.Start(r.Context(), "get_book")
-		defer span.End()
-
-		reader, err := storage.Reader(ctx, config.DatabaseFile)
-		if err != nil {
-			return tracing.Error(span, err)
-		}
-
-		book, err := openlibrary.GetBookByID(ctx, reader, r.PathValue("id"))
-		if err != nil {
-			return tracing.Error(span, err)
-		}
-
-		edition := book.Editions[0]
-
-		http.Redirect(w, r, fmt.Sprintf("/catalogue/books/%s/%s", book.ID, edition.Isbns[0]), http.StatusFound)
-		return nil
-
-	}))
-
 	mux.HandleFunc("GET /catalogue/books/{id}/{isbn}", routing.RouteHandler(func(w http.ResponseWriter, r *http.Request) error {
-		ctx, span := tr.Start(r.Context(), "get_edition")
+		_, span := tr.Start(r.Context(), "get_edition")
 		defer span.End()
 
-		reader, err := storage.Reader(ctx, config.DatabaseFile)
-		if err != nil {
-			return tracing.Error(span, err)
-		}
+		// reader, err := storage.Reader(ctx, config.DatabaseFile)
+		// if err != nil {
+		// 	return tracing.Error(span, err)
+		// }
 
-		book, err := openlibrary.GetBookByID(ctx, reader, r.PathValue("id"))
-		if err != nil {
-			return tracing.Error(span, err)
-		}
+		// book, err := openlibrary.GetBookByID(ctx, reader, r.PathValue("id"))
+		// if err != nil {
+		// 	return tracing.Error(span, err)
+		// }
 
-		isbn := r.PathValue("isbn")
-		edition := book.Edition(isbn)
-		if edition == nil {
-			return tracing.Errorf(span, "no matching edition for isbn: %s", isbn)
-		}
+		// isbn := r.PathValue("isbn")
+		// edition := book.Edition(isbn)
+		// if edition == nil {
+		// 	return tracing.Errorf(span, "no matching edition for isbn: %s", isbn)
+		// }
 
 		form, err := routing.Form(r)
 		if err != nil {
@@ -102,8 +79,8 @@ func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.Serv
 		}
 		dto := map[string]any{
 			"QueryParams": form,
-			"Book":        book,
-			"Edition":     edition,
+			// "Book":        book,
+			// "Edition":     edition,
 		}
 
 		w.Header().Set("Content-Type", "text/html")
