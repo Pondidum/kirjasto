@@ -200,6 +200,10 @@ func buildResults(ctx context.Context, rows iter.Seq[bookResult]) ([]*Book, erro
 				openLibraryKey: editionDto.Key,
 			}
 
+			if len(book.Isbns) == 0 {
+				continue
+			}
+
 			if publishDate, err := parsePublishDate(editionDto.PublishDate); err == nil {
 				book.PublishDate = &publishDate
 			} else {
