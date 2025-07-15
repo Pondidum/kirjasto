@@ -22,6 +22,9 @@ func blankLibrary() *Library {
 
 	goes.Register(library.state, library.onLibraryCreated)
 	goes.Register(library.state, library.onBookImported)
+	goes.Register(library.state, library.onBookAdded)
+	goes.Register(library.state, library.onBookStarted)
+	goes.Register(library.state, library.onBookFinished)
 
 	return library
 }
@@ -82,7 +85,7 @@ type BookImported struct {
 	Isbns     []string
 	Rating    int
 	ReadCount int
-	Shelves   []string
+	Tags      []string
 
 	DateAdded time.Time
 	DateRead  time.Time
@@ -100,7 +103,7 @@ func (l *Library) ImportBook(info BookImport) error {
 		Isbns:     info.Isbns,
 		Rating:    info.Rating,
 		ReadCount: info.ReadCount,
-		Shelves:   info.Shelves,
+		Tags:      info.Shelves,
 
 		DateAdded: info.DateAdded,
 		DateRead:  info.DateRead,
@@ -112,4 +115,71 @@ func (l *Library) onBookImported(e BookImported) {
 	for _, isbn := range e.Isbns {
 		l.knownIsbns[isbn] = true
 	}
+}
+
+type BookAdded struct {
+	Isbns     []string
+	Tags      []string
+	DateAdded time.Time
+}
+
+func (l *Library) AddBook(isbns []string, tags []string) error {
+
+	for _, isbn := range isbns {
+		if _, found := l.knownIsbns[isbn]; found {
+			return nil
+		}
+	}
+
+	return goes.Apply(l.state, BookAdded{
+		Isbns:     isbns,
+		Tags:      tags,
+		DateAdded: time.Now(),
+	})
+}
+
+func (l *Library) onBookAdded(e BookAdded) {
+	for _, isbn := range e.Isbns {
+		l.knownIsbns[isbn] = true
+	}
+}
+
+type BookStarted struct {
+	Isbn string
+	When time.Time
+}
+
+func (l *Library) StartReading(isbn string, when time.Time) error {
+	if when.IsZero() {
+		when = time.Now()
+	}
+
+	return goes.Apply(l.state, BookStarted{
+		Isbn: isbn,
+		When: when,
+	})
+}
+
+func (l *Library) onBookStarted(e BookStarted) {
+	// ?
+}
+
+type BookFinished struct {
+	Isbn string
+	When time.Time
+}
+
+func (l *Library) FinishReading(isbn string, when time.Time) error {
+	if when.IsZero() {
+		when = time.Now()
+	}
+
+	return goes.Apply(l.state, BookFinished{
+		Isbn: isbn,
+		When: when,
+	})
+}
+
+func (l *Library) onBookFinished(e BookFinished) {
+	// ?
 }

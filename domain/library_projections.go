@@ -8,8 +8,8 @@ import (
 )
 
 type LibraryView struct {
-	Shelves map[string]struct{}
-	Books   []*openlibrary.Book
+	Tags  map[string]struct{}
+	Books []*openlibrary.Book
 }
 
 type LibraryProjection struct {
@@ -28,13 +28,13 @@ func NewLibraryProjection() *LibraryProjection {
 }
 
 func (p *LibraryProjection) onLibraryCreated(ctx context.Context, view *LibraryView, event LibraryCreated) error {
-	view.Shelves = map[string]struct{}{}
+	view.Tags = map[string]struct{}{}
 	return nil
 }
 
 func (p *LibraryProjection) onBookImported(ctx context.Context, view *LibraryView, event BookImported) error {
-	for _, shelf := range event.Shelves {
-		view.Shelves[shelf] = struct{}{}
+	for _, tag := range event.Tags {
+		view.Tags[tag] = struct{}{}
 	}
 
 	// prefer longer isbns

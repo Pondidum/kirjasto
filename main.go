@@ -7,6 +7,7 @@ import (
 	"kirjasto/command/goes"
 	"kirjasto/command/import_goodreads"
 	"kirjasto/command/import_openlibrary"
+	"kirjasto/command/library"
 	"kirjasto/command/server"
 	"kirjasto/command/version"
 	"os"
@@ -23,7 +24,10 @@ func main() {
 		"import openlibrary": command.NewCommand(import_openlibrary.NewImportCommand()),
 		"import goodreads":   command.NewCommand(import_goodreads.NewImportCommand()),
 
-		"catalogue search":   command.NewCommand(catalogue.NewSearchCommand()),
+		"catalogue search": command.NewCommand(catalogue.NewSearchCommand()),
+
+		"library add": command.NewCommand(library.NewAddCommand()),
+
 		"goes rebuild views": command.NewCommand(goes.NewGoesCommand()),
 	}
 
