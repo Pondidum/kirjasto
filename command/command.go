@@ -56,9 +56,10 @@ func (c *command) Run(args []string) int {
 	shutdown, err := tracing.Configure(ctx, "kirjasto", version.VersionNumber())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err.Error())
+		shutdown(context.Background())
 		return 1
 	}
-	defer shutdown(ctx)
+	defer shutdown(context.Background())
 
 	tr := otel.Tracer("kirjasto")
 	ctx, span := tr.Start(ctx, "main")
