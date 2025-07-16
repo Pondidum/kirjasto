@@ -157,10 +157,10 @@ func asBookImport(span trace.Span, line []string) domain.BookImport {
 	}
 
 	dateRead := time.Time{}
-	if val := line[fieldDateAdded]; val != "" {
+	if val := line[fieldDateRead]; val != "" {
 		parsed, err := time.Parse("2006/01/02", val)
 		if err != nil {
-			span.RecordError(fmt.Errorf("couldn't parse DateAdded: %w", err))
+			span.RecordError(fmt.Errorf("couldn't parse DateRead: %w", err))
 		} else {
 			dateRead = parsed
 		}
