@@ -70,6 +70,21 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		library = domain.NewLibrary(domain.LibraryID)
 	}
 
+	if err := processFile(ctx, library, filePath); err != nil {
+		return tracing.Error(span, err)
+	}
+
+	if err := domain.SaveLibrary(ctx, eventStore, library); err != nil {
+		return tracing.Error(span, err)
+	}
+
+	return nil
+}
+
+func processFile(ctx context.Context, library *domain.Library, filePath string) error {
+	ctx, span := tr.Start(ctx, "process_file")
+	defer span.End()
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		return tracing.Error(span, err)
@@ -100,10 +115,6 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 	}
 
 	span.SetAttributes(attribute.Int("csv.lines", lines))
-
-	if err := domain.SaveLibrary(ctx, eventStore, library); err != nil {
-		return tracing.Error(span, err)
-	}
 
 	return nil
 }
