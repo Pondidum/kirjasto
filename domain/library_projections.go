@@ -5,11 +5,20 @@ import (
 	"kirjasto/goes"
 	"kirjasto/openlibrary"
 	"slices"
+	"time"
 )
 
 type LibraryView struct {
 	Tags  map[string]struct{}
-	Books []*openlibrary.Book
+	Books []*LibraryEntry
+}
+
+type LibraryEntry struct {
+	*openlibrary.Book
+
+	Added time.Time
+	Tags  []string
+	State string
 }
 
 type LibraryProjection struct {
@@ -42,19 +51,50 @@ func (p *LibraryProjection) onBookImported(ctx context.Context, view *LibraryVie
 		return len(b) - len(a)
 	})
 
-	for _, isbn := range event.Isbns {
+	book, err := p.findBook(ctx, event.Isbns)
+	if err != nil {
+		return err
+	}
+
+	if book == nil {
+		return err
+	}
+
+	state := "unread"
+	if !event.DateRead.IsZero() {
+		state = "read"
+	}
+
+	// view.Books = append(view.Books, book)
+	view.Books = append(view.Books, &LibraryEntry{
+		Book:  book,
+		Added: event.DateAdded,
+		Tags:  event.Tags,
+		State: state,
+	})
+
+	return nil
+}
+
+func (p *LibraryProjection) findBook(ctx context.Context, isbns []string) (*openlibrary.Book, error) {
+
+	// prefer longer isbns
+	slices.SortFunc(isbns, func(a, b string) int {
+		return len(b) - len(a)
+	})
+
+	for _, isbn := range isbns {
 		books, err := openlibrary.FindBooksByIsbn(ctx, p.Tx, isbn)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		if len(books) == 0 {
 			continue
 		}
 
-		view.Books = append(view.Books, books[0])
-		break
+		return books[0], nil
 	}
 
-	return nil
+	return nil, nil
 }
