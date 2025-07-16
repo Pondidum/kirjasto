@@ -3,6 +3,7 @@ package import_goodreads
 import (
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"io"
 	"kirjasto/config"
@@ -11,6 +12,7 @@ import (
 	"kirjasto/storage"
 	"kirjasto/tracing"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -81,9 +83,63 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 	return nil
 }
 
+func readReviewsFile(ctx context.Context, exportFilePath string) (map[string]reviewEntry, error) {
+	ctx, span := tr.Start(ctx, "read_reviews")
+	defer span.End()
+
+	reviewsFilePath := path.Join(path.Dir(exportFilePath), "review.json")
+
+	file, err := os.Open(reviewsFilePath)
+	if err != nil {
+		return nil, tracing.Error(span, err)
+	}
+	defer file.Close()
+
+	type reviewDto struct {
+		Book       string
+		ReadStatus string `json:"read_status"`
+		UpdatedAt  string `json:"updated_at"`
+	}
+
+	var reviews []reviewDto
+	if err := json.NewDecoder(file).Decode(&reviews); err != nil {
+		return nil, tracing.Error(span, err)
+	}
+
+	lookup := make(map[string]reviewEntry, len(reviews))
+	for _, review := range reviews {
+		if review.Book != "" {
+
+			ts, err := time.Parse("2006-01-02 15:04:05 MST", review.UpdatedAt)
+			if err != nil {
+				return nil, tracing.Error(span, err)
+			}
+
+			lookup[review.Book] = reviewEntry{
+				Book:       review.Book,
+				ReadStatus: review.ReadStatus,
+				UpdatedAt:  ts,
+			}
+		}
+	}
+
+	return lookup, nil
+}
+
+type reviewEntry struct {
+	Book       string
+	ReadStatus string
+	UpdatedAt  time.Time
+}
+
 func processFile(ctx context.Context, library *domain.Library, filePath string) error {
 	ctx, span := tr.Start(ctx, "process_file")
 	defer span.End()
+
+	reviews, err := readReviewsFile(ctx, filePath)
+	if err != nil {
+		return tracing.Error(span, err)
+	}
 
 	file, err := os.Open(filePath)
 	if err != nil {
@@ -109,7 +165,7 @@ func processFile(ctx context.Context, library *domain.Library, filePath string) 
 		}
 		lines++
 
-		if err := library.ImportBook(asBookImport(span, line)); err != nil {
+		if err := library.ImportBook(asBookImport(span, reviews, line)); err != nil {
 			return tracing.Error(span, err)
 		}
 	}
@@ -119,7 +175,7 @@ func processFile(ctx context.Context, library *domain.Library, filePath string) 
 	return nil
 }
 
-func asBookImport(span trace.Span, line []string) domain.BookImport {
+func asBookImport(span trace.Span, reviews map[string]reviewEntry, line []string) domain.BookImport {
 	isbns := make([]string, 0, 2)
 	if isbn := line[fieldISBN13]; isbn != "" && isbn != `=""` {
 		isbns = append(isbns, strings.TrimSuffix(strings.TrimPrefix(isbn, `="`), `"`))
@@ -174,6 +230,14 @@ func asBookImport(span trace.Span, line []string) domain.BookImport {
 			span.RecordError(fmt.Errorf("couldn't parse DateRead: %w", err))
 		} else {
 			dateRead = parsed
+		}
+	}
+
+	if readCount > 0 && dateRead.IsZero() {
+		title := line[fieldTitle]
+		if review, found := reviews[title]; found {
+			span.AddEvent("review_lookup", trace.WithAttributes(attribute.String("book.title", title)))
+			dateRead = review.UpdatedAt
 		}
 	}
 
