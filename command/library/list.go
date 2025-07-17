@@ -17,7 +17,7 @@ func NewListCommand() *ListCommand {
 }
 
 type ListCommand struct {
-	tags []string
+	statsOnly bool
 }
 
 func (c *ListCommand) Synopsis() string {
@@ -26,6 +26,7 @@ func (c *ListCommand) Synopsis() string {
 
 func (c *ListCommand) Flags() *pflag.FlagSet {
 	flags := pflag.NewFlagSet("list", pflag.ContinueOnError)
+	flags.BoolVar(&c.statsOnly, "stats", false, "print some stats and exit")
 	return flags
 }
 
@@ -44,6 +45,11 @@ func (c *ListCommand) Execute(ctx context.Context, config *config.Config, args [
 		return tracing.Error(span, err)
 	}
 
+	c.printStats(ctx, library)
+	if c.statsOnly {
+		return nil
+	}
+
 	rows := make([]string, 0, len(library.Books)+1)
 	rows = append(rows, "isbn | state | title | added")
 
@@ -54,4 +60,20 @@ func (c *ListCommand) Execute(ctx context.Context, config *config.Config, args [
 	fmt.Println(columnize.SimpleFormat(rows))
 
 	return nil
+}
+
+func (c *ListCommand) printStats(ctx context.Context, library *domain.LibraryView) {
+	read := 0
+	unread := 0
+
+	for _, book := range library.Books {
+		switch book.State {
+		case "read":
+			read++
+		case "unread":
+			unread++
+		}
+	}
+
+	fmt.Printf("Total books: %v (%v read, %v unread)\n", len(library.Books), read, unread)
 }
