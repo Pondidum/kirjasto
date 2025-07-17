@@ -175,7 +175,7 @@ func processFile(ctx context.Context, library *domain.Library, filePath string) 
 	return nil
 }
 
-func asBookImport(span trace.Span, reviews map[string]reviewEntry, line []string) domain.BookImport {
+func asBookImport(span trace.Span, reviews map[string]reviewEntry, line []string) domain.ImportData {
 	isbns := make([]string, 0, 2)
 	if isbn := line[fieldISBN13]; isbn != "" && isbn != `=""` {
 		isbns = append(isbns, strings.TrimSuffix(strings.TrimPrefix(isbn, `="`), `"`))
@@ -241,8 +241,25 @@ func asBookImport(span trace.Span, reviews map[string]reviewEntry, line []string
 		}
 	}
 
-	return domain.BookImport{
-		Isbns:     isbns,
+	publishYear := 0
+	if val := line[fieldYearPublished]; val != "" {
+		parsed, err := strconv.Atoi(val)
+		if err != nil {
+			span.RecordError(fmt.Errorf("couldn't parse YearPublished: %w", err))
+		} else {
+			publishYear = parsed
+		}
+	}
+
+	title := line[fieldTitle]
+	author := line[fieldAuthor]
+
+	return domain.ImportData{
+		Isbns:       isbns,
+		Title:       title,
+		Author:      author,
+		PublishYear: publishYear,
+
 		Rating:    rating,
 		ReadCount: readCount,
 		Shelves:   shelves,

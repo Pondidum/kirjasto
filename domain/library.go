@@ -71,8 +71,12 @@ func (l *Library) onLibraryCreated(e LibraryCreated) {
 	goes.SetID(l.state, e.ID)
 }
 
-type BookImport struct {
-	Isbns     []string
+type ImportData struct {
+	Isbns       []string
+	Title       string
+	Author      string
+	PublishYear int
+
 	Rating    int
 	ReadCount int
 	Shelves   []string
@@ -82,7 +86,11 @@ type BookImport struct {
 }
 
 type BookImported struct {
-	Isbns     []string
+	Isbns       []string
+	Title       string
+	Author      string
+	PublishYear int
+
 	Rating    int
 	ReadCount int
 	Tags      []string
@@ -91,7 +99,7 @@ type BookImported struct {
 	DateRead  time.Time
 }
 
-func (l *Library) ImportBook(info BookImport) error {
+func (l *Library) ImportBook(info ImportData) error {
 
 	for _, isbn := range info.Isbns {
 		if _, found := l.knownIsbns[isbn]; found {
@@ -100,7 +108,11 @@ func (l *Library) ImportBook(info BookImport) error {
 	}
 
 	return goes.Apply(l.state, BookImported{
-		Isbns:     info.Isbns,
+		Isbns:       info.Isbns,
+		Title:       info.Title,
+		Author:      info.Author,
+		PublishYear: info.PublishYear,
+
 		Rating:    info.Rating,
 		ReadCount: info.ReadCount,
 		Tags:      info.Shelves,
