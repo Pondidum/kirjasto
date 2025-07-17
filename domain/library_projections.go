@@ -2,9 +2,11 @@ package domain
 
 import (
 	"context"
+	"fmt"
 	"kirjasto/goes"
 	"kirjasto/openlibrary"
 	"slices"
+	"strings"
 	"time"
 )
 
@@ -46,18 +48,14 @@ func (p *LibraryProjection) onBookImported(ctx context.Context, view *LibraryVie
 		view.Tags[tag] = struct{}{}
 	}
 
-	// prefer longer isbns
-	slices.SortFunc(event.Isbns, func(a, b string) int {
-		return len(b) - len(a)
-	})
-
-	book, err := p.findBook(ctx, event.Isbns)
+	book, err := p.findBook(ctx, event)
 	if err != nil {
 		return err
 	}
 
 	if book == nil {
-		return err
+		fmt.Println("no book found for:", strings.Join(event.Isbns, ","), event.Title)
+		return nil
 	}
 
 	state := "unread"
@@ -76,8 +74,9 @@ func (p *LibraryProjection) onBookImported(ctx context.Context, view *LibraryVie
 	return nil
 }
 
-func (p *LibraryProjection) findBook(ctx context.Context, isbns []string) (*openlibrary.Book, error) {
+func (p *LibraryProjection) findBook(ctx context.Context, event BookImported) (*openlibrary.Book, error) {
 
+	isbns := event.Isbns
 	// prefer longer isbns
 	slices.SortFunc(isbns, func(a, b string) int {
 		return len(b) - len(a)
@@ -88,11 +87,16 @@ func (p *LibraryProjection) findBook(ctx context.Context, isbns []string) (*open
 		if err != nil {
 			return nil, err
 		}
-
-		if len(books) == 0 {
-			continue
+		if len(books) != 0 {
+			return books[0], nil
 		}
+	}
 
+	books, err := openlibrary.FindBooks(ctx, p.Tx, event.Title)
+	if err != nil {
+		return nil, err
+	}
+	if len(books) != 0 {
 		return books[0], nil
 	}
 
