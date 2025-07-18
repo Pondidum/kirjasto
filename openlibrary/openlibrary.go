@@ -89,7 +89,7 @@ func FindBooks(ctx context.Context, reader Readable, search string) ([]*Book, er
 			-- highlight(editions_fts, 1, '{{', '}}')
 		from editions e
 		join editions_fts fts on e.id = fts.edition_id
-		where fts.title match @term
+		where editions_fts match @term
 		order by rank
 	`
 
