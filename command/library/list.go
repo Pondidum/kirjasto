@@ -54,7 +54,11 @@ func (c *ListCommand) Execute(ctx context.Context, config *config.Config, args [
 	rows = append(rows, "isbn | state | title | added")
 
 	for _, book := range library.Books {
-		rows = append(rows, fmt.Sprintf("%s | %s | %s | %s", book.Isbns[0], book.State, book.Title, book.Added.Format("2006-01-02")))
+		isbn := "unknown"
+		if len(book.Isbns) > 0 {
+			isbn = book.Isbns[0]
+		}
+		rows = append(rows, fmt.Sprintf("%s | %s | %s | %s", isbn, book.State, book.Title, book.Added.Format("2006-01-02")))
 	}
 
 	fmt.Println(columnize.SimpleFormat(rows))
