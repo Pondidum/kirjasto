@@ -15,10 +15,13 @@ import (
 var tr = otel.Tracer("command.library")
 
 func NewAddCommand() *AddCommand {
-	return &AddCommand{}
+	return &AddCommand{
+		book: domain.BookInfo{},
+	}
 }
 
 type AddCommand struct {
+	book domain.BookInfo
 	tags []string
 }
 
@@ -28,6 +31,10 @@ func (c *AddCommand) Synopsis() string {
 
 func (c *AddCommand) Flags() *pflag.FlagSet {
 	flags := pflag.NewFlagSet("add", pflag.ContinueOnError)
+	flags.StringSliceVar(&c.book.Isbns, "isbn", []string{}, "the book's isbn(s)")
+	flags.StringVar(&c.book.Title, "title", "", "the book's title")
+	flags.StringVar(&c.book.Author, "author", "", "the book's author")
+	flags.IntVar(&c.book.PublishYear, "publish-year", 0, "the year the book was published")
 	flags.StringSliceVar(&c.tags, "tags", []string{}, "tags to add to the book")
 	return flags
 }
@@ -36,11 +43,9 @@ func (c *AddCommand) Execute(ctx context.Context, config *config.Config, args []
 	ctx, span := tr.Start(ctx, "execute")
 	defer span.End()
 
-	if len(args) != 1 {
-		return tracing.Errorf(span, "this command expects 1 argument: isbn")
+	if len(c.book.Isbns) == 0 && c.book.Title == "" {
+		return tracing.Errorf(span, "The books must have at least one of: isbn, title")
 	}
-
-	isbn := args[0]
 
 	writer, err := storage.Writer(ctx, config.DatabaseFile)
 	if err != nil {
@@ -48,12 +53,21 @@ func (c *AddCommand) Execute(ctx context.Context, config *config.Config, args []
 	}
 
 	store := goes.NewSqliteStore(writer)
+
+	if err := goes.RegisterProjection("library_view", domain.NewLibraryProjection()); err != nil {
+		return tracing.Error(span, err)
+	}
+
 	library, err := domain.LoadLibrary(ctx, store, domain.LibraryID)
 	if err != nil {
 		return tracing.Error(span, err)
 	}
 
-	if err := library.AddBook([]string{isbn}, c.tags); err != nil {
+	if err := library.AddBook(c.book, c.tags); err != nil {
+		return tracing.Error(span, err)
+	}
+
+	if err := domain.SaveLibrary(ctx, store, library); err != nil {
 		return tracing.Error(span, err)
 	}
 

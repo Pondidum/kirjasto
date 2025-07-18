@@ -10,7 +10,6 @@ import (
 )
 
 type LibraryView struct {
-	Tags  map[string]struct{}
 	Books []*LibraryEntry
 }
 
@@ -35,58 +34,76 @@ func NewLibraryProjection() *LibraryProjection {
 
 	goes.AddProjectionHandler(projection.SqlProjection, projection.onLibraryCreated)
 	goes.AddProjectionHandler(projection.SqlProjection, projection.onBookImported)
+	goes.AddProjectionHandler(projection.SqlProjection, projection.onBookAdded)
 
 	return projection
 }
 
 func (p *LibraryProjection) onLibraryCreated(ctx context.Context, view *LibraryView, event LibraryCreated) error {
-	view.Tags = map[string]struct{}{}
 	return nil
 }
 
-func (p *LibraryProjection) onBookImported(ctx context.Context, view *LibraryView, event BookImported) error {
-	for _, tag := range event.Tags {
-		view.Tags[tag] = struct{}{}
-	}
-
-	book, err := p.findBook(ctx, event)
+func (p *LibraryProjection) onBookAdded(ctx context.Context, view *LibraryView, event BookAdded) error {
+	le, err := p.createLibraryEntry(ctx, event.Book)
 	if err != nil {
 		return err
 	}
 
-	state := "unread"
+	le.Tags = event.Tags
+	le.Added = event.DateAdded
+
+	view.Books = append(view.Books, le)
+	return nil
+}
+
+func (p *LibraryProjection) onBookImported(ctx context.Context, view *LibraryView, event BookImported) error {
+	le, err := p.createLibraryEntry(ctx, event.Book)
+	if err != nil {
+		return err
+	}
+
 	if !event.DateRead.IsZero() {
-		state = "read"
+		le.State = "read"
 	}
 
-	le := &LibraryEntry{
-		Book:      book,
-		Added:     event.DateAdded,
-		Tags:      event.Tags,
-		State:     state,
-		KnownBook: book != nil,
-	}
-
-	if le.Book == nil {
-		le.Book = &openlibrary.Book{
-			Title:   event.Title,
-			Authors: []openlibrary.Author{{Name: event.Author}},
-			Isbns:   event.Isbns,
-		}
-		if event.PublishYear != 0 {
-			ts := time.Date(event.PublishYear, 0, 0, 0, 0, 0, 0, time.UTC)
-			le.Book.PublishDate = &ts
-		}
-	}
+	le.Tags = event.Tags
+	le.Added = event.DateAdded
 
 	view.Books = append(view.Books, le)
 
 	return nil
 }
 
-func (p *LibraryProjection) findBook(ctx context.Context, event BookImported) (*openlibrary.Book, error) {
+func (p *LibraryProjection) createLibraryEntry(ctx context.Context, info BookInfo) (*LibraryEntry, error) {
+	book, err := p.findBook(ctx, info)
+	if err != nil {
+		return nil, err
+	}
 
-	isbns := event.Isbns
+	le := &LibraryEntry{
+		Book:      book,
+		State:     "unread",
+		KnownBook: book != nil,
+	}
+
+	if le.Book == nil {
+		le.Book = &openlibrary.Book{
+			Title:   info.Title,
+			Authors: []openlibrary.Author{{Name: info.Author}},
+			Isbns:   info.Isbns,
+		}
+		if info.PublishYear != 0 {
+			ts := time.Date(info.PublishYear, 0, 0, 0, 0, 0, 0, time.UTC)
+			le.Book.PublishDate = &ts
+		}
+	}
+
+	return le, nil
+}
+
+func (p *LibraryProjection) findBook(ctx context.Context, info BookInfo) (*openlibrary.Book, error) {
+
+	isbns := info.Isbns
 	// prefer longer isbns
 	slices.SortFunc(isbns, func(a, b string) int {
 		return len(b) - len(a)
@@ -102,7 +119,7 @@ func (p *LibraryProjection) findBook(ctx context.Context, event BookImported) (*
 		}
 	}
 
-	cleaned := strings.ReplaceAll(event.Title, ":", "")
+	cleaned := strings.ReplaceAll(info.Title, ":", "")
 	books, err := openlibrary.FindBooks(ctx, p.Tx, cleaned)
 	if err != nil {
 		return nil, err

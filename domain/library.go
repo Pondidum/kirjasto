@@ -86,14 +86,11 @@ type ImportData struct {
 }
 
 type BookImported struct {
-	Isbns       []string
-	Title       string
-	Author      string
-	PublishYear int
+	Book BookInfo
 
+	Tags      []string
 	Rating    int
 	ReadCount int
-	Tags      []string
 
 	DateAdded time.Time
 	DateRead  time.Time
@@ -108,10 +105,12 @@ func (l *Library) ImportBook(info ImportData) error {
 	}
 
 	return goes.Apply(l.state, BookImported{
-		Isbns:       info.Isbns,
-		Title:       info.Title,
-		Author:      info.Author,
-		PublishYear: info.PublishYear,
+		Book: BookInfo{
+			Isbns:       info.Isbns,
+			Title:       info.Title,
+			Author:      info.Author,
+			PublishYear: info.PublishYear,
+		},
 
 		Rating:    info.Rating,
 		ReadCount: info.ReadCount,
@@ -124,34 +123,41 @@ func (l *Library) ImportBook(info ImportData) error {
 
 func (l *Library) onBookImported(e BookImported) {
 
-	for _, isbn := range e.Isbns {
+	for _, isbn := range e.Book.Isbns {
 		l.knownIsbns[isbn] = true
 	}
 }
 
 type BookAdded struct {
-	Isbns     []string
+	Book      BookInfo
 	Tags      []string
 	DateAdded time.Time
 }
 
-func (l *Library) AddBook(isbns []string, tags []string) error {
+type BookInfo struct {
+	Isbns       []string
+	Title       string
+	Author      string
+	PublishYear int
+}
 
-	for _, isbn := range isbns {
+func (l *Library) AddBook(book BookInfo, tags []string) error {
+
+	for _, isbn := range book.Isbns {
 		if _, found := l.knownIsbns[isbn]; found {
 			return nil
 		}
 	}
 
 	return goes.Apply(l.state, BookAdded{
-		Isbns:     isbns,
+		Book:      book,
 		Tags:      tags,
 		DateAdded: time.Now(),
 	})
 }
 
 func (l *Library) onBookAdded(e BookAdded) {
-	for _, isbn := range e.Isbns {
+	for _, isbn := range e.Book.Isbns {
 		l.knownIsbns[isbn] = true
 	}
 }
