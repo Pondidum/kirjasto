@@ -2,7 +2,6 @@ package domain
 
 import (
 	"context"
-	"fmt"
 	"kirjasto/goes"
 	"kirjasto/openlibrary"
 	"slices"
@@ -21,6 +20,8 @@ type LibraryEntry struct {
 	Added time.Time
 	Tags  []string
 	State string
+
+	KnownBook bool
 }
 
 type LibraryProjection struct {
@@ -53,23 +54,32 @@ func (p *LibraryProjection) onBookImported(ctx context.Context, view *LibraryVie
 		return err
 	}
 
-	if book == nil {
-		fmt.Println("no book found for:", strings.Join(event.Isbns, ","), event.Title)
-		return nil
-	}
-
 	state := "unread"
 	if !event.DateRead.IsZero() {
 		state = "read"
 	}
 
-	// view.Books = append(view.Books, book)
-	view.Books = append(view.Books, &LibraryEntry{
-		Book:  book,
-		Added: event.DateAdded,
-		Tags:  event.Tags,
-		State: state,
-	})
+	le := &LibraryEntry{
+		Book:      book,
+		Added:     event.DateAdded,
+		Tags:      event.Tags,
+		State:     state,
+		KnownBook: book != nil,
+	}
+
+	if le.Book == nil {
+		le.Book = &openlibrary.Book{
+			Title:   event.Title,
+			Authors: []openlibrary.Author{{Name: event.Author}},
+			Isbns:   event.Isbns,
+		}
+		if event.PublishYear != 0 {
+			ts := time.Date(event.PublishYear, 0, 0, 0, 0, 0, 0, time.UTC)
+			le.Book.PublishDate = &ts
+		}
+	}
+
+	view.Books = append(view.Books, le)
 
 	return nil
 }
@@ -92,7 +102,8 @@ func (p *LibraryProjection) findBook(ctx context.Context, event BookImported) (*
 		}
 	}
 
-	books, err := openlibrary.FindBooks(ctx, p.Tx, event.Title)
+	cleaned := strings.ReplaceAll(event.Title, ":", "")
+	books, err := openlibrary.FindBooks(ctx, p.Tx, cleaned)
 	if err != nil {
 		return nil, err
 	}
