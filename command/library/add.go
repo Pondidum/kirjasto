@@ -54,7 +54,7 @@ func (c *AddCommand) Execute(ctx context.Context, config *config.Config, args []
 
 	store := goes.NewSqliteStore(writer)
 
-	if err := goes.RegisterProjection("library_view", domain.NewLibraryProjection()); err != nil {
+	if err := store.RegisterProjection("library_view", domain.NewLibraryProjection()); err != nil {
 		return tracing.Error(span, err)
 	}
 

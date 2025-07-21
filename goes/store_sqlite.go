@@ -19,11 +19,15 @@ var tr = otel.Tracer("goes")
 func NewSqliteStore(db *sql.DB) *SqliteStore {
 	return &SqliteStore{
 		db: db,
+		projections: Projectionist{
+			projections: map[string]Projection{},
+		},
 	}
 }
 
 type SqliteStore struct {
-	db *sql.DB
+	db          *sql.DB
+	projections Projectionist
 }
 
 func (s *SqliteStore) Initialise(ctx context.Context) error {
@@ -54,6 +58,10 @@ create table if not exists auto_projections(
 	return nil
 }
 
+func (s *SqliteStore) RegisterProjection(name string, projection Projection) error {
+	return s.projections.RegisterProjection(name, projection)
+}
+
 func (s *SqliteStore) Save(ctx context.Context, aggregateID uuid.UUID, sequence int, events []EventDescriptor) error {
 	ctx, span := tr.Start(ctx, "save")
 	defer span.End()
@@ -68,7 +76,7 @@ func (s *SqliteStore) Save(ctx context.Context, aggregateID uuid.UUID, sequence 
 		return tracing.Error(span, err)
 	}
 
-	if err := projectionist.Load(ctx, tx); err != nil {
+	if err := s.projections.Load(ctx, tx); err != nil {
 		return tracing.Error(span, err)
 	}
 
@@ -81,12 +89,12 @@ func (s *SqliteStore) Save(ctx context.Context, aggregateID uuid.UUID, sequence 
 		if err := writer.Write(ctx, event); err != nil {
 			return err
 		}
-		if err := projectionist.Project(ctx, event); err != nil {
+		if err := s.projections.Project(ctx, event); err != nil {
 			return tracing.Error(span, err)
 		}
 	}
 
-	if err := projectionist.Save(ctx, tx); err != nil {
+	if err := s.projections.Save(ctx, tx); err != nil {
 		return tracing.Error(span, err)
 	}
 

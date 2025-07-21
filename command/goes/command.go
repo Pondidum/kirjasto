@@ -45,7 +45,7 @@ func (c *GoesProjectionCommand) Execute(ctx context.Context, config *config.Conf
 	}
 
 	projection := domain.NewLibraryProjection()
-	if err := goes.RegisterProjection("library_view", projection); err != nil {
+	if err := eventStore.RegisterProjection("library_view", projection); err != nil {
 		return tracing.Error(span, err)
 	}
 

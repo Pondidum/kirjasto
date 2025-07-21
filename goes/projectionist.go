@@ -7,23 +7,18 @@ import (
 	"kirjasto/tracing"
 )
 
-var projectionist = Projectionist{
-	projections: map[string]Projection{},
-}
-
-func RegisterProjection(name string, projection Projection) error {
-	if _, found := projectionist.projections[name]; found {
-		return fmt.Errorf("a projection with the name '%s' already exists", name)
-	}
-
-	projectionist.projections[name] = projection
-	return nil
-}
-
 type Projectionist struct {
 	projections map[string]Projection
 }
 
+func (p *Projectionist) RegisterProjection(name string, projection Projection) error {
+	if _, found := p.projections[name]; found {
+		return fmt.Errorf("a projection with the name '%s' already exists", name)
+	}
+
+	p.projections[name] = projection
+	return nil
+}
 func (p *Projectionist) Load(ctx context.Context, tx *sql.Tx) error {
 	ctx, span := tr.Start(ctx, "load")
 	defer span.End()
