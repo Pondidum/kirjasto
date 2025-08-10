@@ -47,27 +47,10 @@ func (c *AddCommand) Execute(ctx context.Context, config *config.Config, args []
 		return tracing.Errorf(span, "The books must have at least one of: isbn, title")
 	}
 
-	writer, err := storage.Writer(ctx, config.DatabaseFile)
+	err := libraryAction(ctx, config, func(library *domain.Library) error {
+		return library.AddBook(c.book, c.tags)
+	})
 	if err != nil {
-		return tracing.Error(span, err)
-	}
-
-	store := goes.NewSqliteStore(writer)
-
-	if err := store.RegisterProjection("library_view", domain.NewLibraryProjection()); err != nil {
-		return tracing.Error(span, err)
-	}
-
-	library, err := domain.LoadLibrary(ctx, store, domain.LibraryID)
-	if err != nil {
-		return tracing.Error(span, err)
-	}
-
-	if err := library.AddBook(c.book, c.tags); err != nil {
-		return tracing.Error(span, err)
-	}
-
-	if err := domain.SaveLibrary(ctx, store, library); err != nil {
 		return tracing.Error(span, err)
 	}
 
