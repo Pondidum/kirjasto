@@ -14,12 +14,12 @@ var tr = otel.Tracer("command.library")
 
 func NewAddCommand() *AddCommand {
 	return &AddCommand{
-		book: domain.BookInfo{},
+		book: domain.Book{},
 	}
 }
 
 type AddCommand struct {
-	book domain.BookInfo
+	book domain.Book
 	tags []string
 }
 

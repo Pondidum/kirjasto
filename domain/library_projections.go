@@ -74,7 +74,7 @@ func (p *LibraryProjection) onBookImported(ctx context.Context, view *LibraryVie
 	return nil
 }
 
-func (p *LibraryProjection) createLibraryEntry(ctx context.Context, info BookInfo) (*LibraryEntry, error) {
+func (p *LibraryProjection) createLibraryEntry(ctx context.Context, info Book) (*LibraryEntry, error) {
 	book, err := p.findBook(ctx, info)
 	if err != nil {
 		return nil, err
@@ -101,7 +101,7 @@ func (p *LibraryProjection) createLibraryEntry(ctx context.Context, info BookInf
 	return le, nil
 }
 
-func (p *LibraryProjection) findBook(ctx context.Context, info BookInfo) (*openlibrary.Book, error) {
+func (p *LibraryProjection) findBook(ctx context.Context, info Book) (*openlibrary.Book, error) {
 
 	isbns := info.Isbns
 	// prefer longer isbns

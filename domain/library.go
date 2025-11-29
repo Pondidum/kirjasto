@@ -86,7 +86,7 @@ type ImportData struct {
 }
 
 type BookImported struct {
-	Book BookInfo
+	Book Book
 
 	Tags      []string
 	Rating    int
@@ -105,7 +105,7 @@ func (l *Library) ImportBook(info ImportData) error {
 	}
 
 	return goes.Apply(l.state, BookImported{
-		Book: BookInfo{
+		Book: Book{
 			Isbns:       info.Isbns,
 			Title:       info.Title,
 			Author:      info.Author,
@@ -129,19 +129,19 @@ func (l *Library) onBookImported(e BookImported) {
 }
 
 type BookAdded struct {
-	Book      BookInfo
+	Book      Book
 	Tags      []string
 	DateAdded time.Time
 }
 
-type BookInfo struct {
+type Book struct {
 	Isbns       []string
 	Title       string
 	Author      string
 	PublishYear int
 }
 
-func (l *Library) AddBook(book BookInfo, tags []string) error {
+func (l *Library) AddBook(book Book, tags []string) error {
 
 	for _, isbn := range book.Isbns {
 		if _, found := l.knownIsbns[isbn]; found {
