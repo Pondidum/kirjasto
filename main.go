@@ -26,9 +26,10 @@ func main() {
 
 		"catalogue search": command.NewCommand(catalogue.NewSearchCommand()),
 
-		"library list":  command.NewCommand(library.NewListCommand()),
-		"library add":   command.NewCommand(library.NewAddCommand()),
-		"library start": command.NewCommand(library.NewStartCommand()),
+		"library list":   command.NewCommand(library.NewListCommand()),
+		"library add":    command.NewCommand(library.NewAddCommand()),
+		"library start":  command.NewCommand(library.NewStartCommand()),
+		"library finish": command.NewCommand(library.NewFinishCommand()),
 
 		"goes rebuild views": command.NewCommand(goes.NewGoesCommand()),
 	}
