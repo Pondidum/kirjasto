@@ -3,6 +3,7 @@ package domain
 import (
 	"context"
 	"kirjasto/goes"
+	"kirjasto/openlibrary"
 	"kirjasto/tracing"
 	"time"
 
@@ -25,6 +26,7 @@ func blankLibrary() *Library {
 	goes.Register(library.state, library.onBookAdded)
 	goes.Register(library.state, library.onBookStarted)
 	goes.Register(library.state, library.onBookFinished)
+	goes.Register(library.state, library.onBookInfoAdded)
 
 	return library
 }
@@ -160,6 +162,25 @@ func (l *Library) onBookAdded(e BookAdded) {
 	for _, isbn := range e.Book.Isbns {
 		l.knownIsbns[isbn] = true
 	}
+}
+
+type BookInfoAdded struct {
+	Info *openlibrary.Book
+}
+
+func (l *Library) AddBookInfo(info *openlibrary.Book) error {
+
+	for _, isbn := range info.Isbns {
+		if _, found := l.knownIsbns[isbn]; found {
+			return nil
+		}
+	}
+
+	return goes.Apply(l.state, BookInfoAdded{Info: info})
+}
+
+func (l *Library) onBookInfoAdded(e BookInfoAdded) {
+
 }
 
 type BookStarted struct {

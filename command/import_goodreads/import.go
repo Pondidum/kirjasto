@@ -9,6 +9,7 @@ import (
 	"kirjasto/config"
 	"kirjasto/domain"
 	"kirjasto/goes"
+	"kirjasto/openlibrary"
 	"kirjasto/storage"
 	"kirjasto/tracing"
 	"os"
@@ -72,7 +73,7 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		library = domain.NewLibrary(domain.LibraryID)
 	}
 
-	if err := processFile(ctx, library, filePath); err != nil {
+	if err := processFile(ctx, db, library, filePath); err != nil {
 		return tracing.Error(span, err)
 	}
 
@@ -132,7 +133,7 @@ type reviewEntry struct {
 	UpdatedAt  time.Time
 }
 
-func processFile(ctx context.Context, library *domain.Library, filePath string) error {
+func processFile(ctx context.Context, db openlibrary.Readable, library *domain.Library, filePath string) error {
 	ctx, span := tr.Start(ctx, "process_file")
 	defer span.End()
 
@@ -165,7 +166,17 @@ func processFile(ctx context.Context, library *domain.Library, filePath string) 
 		}
 		lines++
 
-		if err := library.ImportBook(asBookImport(span, reviews, line)); err != nil {
+		book := asBookImport(span, reviews, line)
+		if err := library.ImportBook(book); err != nil {
+			return tracing.Error(span, err)
+		}
+
+		info, err := openlibrary.FindBook(ctx, db, book.Title, book.Isbns)
+		if err != nil {
+			return tracing.Error(span, err)
+		}
+
+		if err := library.AddBookInfo(info); err != nil {
 			return tracing.Error(span, err)
 		}
 	}
