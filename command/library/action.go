@@ -13,7 +13,7 @@ func libraryAction(ctx context.Context, config *config.Config, action func(libra
 	ctx, span := tr.Start(ctx, "library_action")
 	defer span.End()
 
-	writer, err := storage.Writer(ctx, config.DatabaseFile)
+	writer, err := storage.Writer(ctx, config.LibraryDb)
 	if err != nil {
 		return tracing.Error(span, err)
 	}

@@ -47,7 +47,7 @@ func (c *AddCommand) Execute(ctx context.Context, config *config.Config, args []
 		return tracing.Errorf(span, "The books must have at least one of: isbn, title")
 	}
 
-	reader, err := storage.Reader(ctx, config.DatabaseFile)
+	reader, err := storage.Reader(ctx, config.OpenLibraryDb)
 	if err != nil {
 		return tracing.Error(span, err)
 	}

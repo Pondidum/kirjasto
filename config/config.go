@@ -5,11 +5,16 @@ import (
 )
 
 type Config struct {
-	DatabaseFile string
+	// DatabaseFile string
+
+	OpenLibraryDb string
+	LibraryDb     string
 }
 
 func CreateConfig(ctx context.Context) (*Config, error) {
 	return &Config{
-		DatabaseFile: "dev.sqlite",
+		// DatabaseFile:  "dev.sqlite",
+		LibraryDb:     "dev.sqlite",
+		OpenLibraryDb: "openlibrary.sqlite",
 	}, nil
 }

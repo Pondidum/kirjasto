@@ -34,7 +34,7 @@ func (c *ListCommand) Execute(ctx context.Context, config *config.Config, args [
 	ctx, span := tr.Start(ctx, "execute")
 	defer span.End()
 
-	reader, err := storage.Reader(ctx, config.DatabaseFile)
+	reader, err := storage.Reader(ctx, config.LibraryDb)
 	if err != nil {
 		return tracing.Error(span, err)
 	}

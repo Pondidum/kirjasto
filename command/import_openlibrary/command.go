@@ -45,7 +45,7 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 
 	dir := args[0]
 
-	writer, err := storage.Writer(ctx, config.DatabaseFile)
+	writer, err := storage.Writer(ctx, config.OpenLibraryDb)
 	if err != nil {
 		return tracing.Error(span, err)
 	}

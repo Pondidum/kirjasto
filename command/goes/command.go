@@ -34,7 +34,7 @@ func (c *GoesProjectionCommand) Execute(ctx context.Context, config *config.Conf
 	ctx, span := tr.Start(ctx, "execute")
 	defer span.End()
 
-	db, err := storage.Writer(ctx, config.DatabaseFile)
+	db, err := storage.Writer(ctx, config.LibraryDb)
 	if err != nil {
 		return tracing.Error(span, err)
 	}

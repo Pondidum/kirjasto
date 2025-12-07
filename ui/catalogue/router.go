@@ -30,7 +30,7 @@ func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.Serv
 		}
 		dto["QueryParams"] = form
 
-		reader, err := storage.Reader(ctx, config.DatabaseFile)
+		reader, err := storage.Reader(ctx, config.OpenLibraryDb)
 		if err != nil {
 			return err
 		}

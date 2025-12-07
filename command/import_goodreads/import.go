@@ -51,7 +51,7 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 	}
 	filePath := args[0]
 
-	db, err := storage.Writer(ctx, config.DatabaseFile)
+	db, err := storage.Writer(ctx, config.LibraryDb)
 	if err != nil {
 		return tracing.Error(span, err)
 	}

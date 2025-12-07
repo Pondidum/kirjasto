@@ -41,7 +41,7 @@ func (c *SearchCommand) Execute(ctx context.Context, config *config.Config, args
 
 	searchTerm := args[0]
 
-	reader, err := storage.Reader(ctx, config.DatabaseFile)
+	reader, err := storage.Reader(ctx, config.OpenLibraryDb)
 	if err != nil {
 		return tracing.Error(span, err)
 	}

@@ -32,7 +32,7 @@ func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.Serv
 			Progress:  r.FormValue("progress"),
 		}
 
-		reader, err := storage.Reader(ctx, config.DatabaseFile)
+		reader, err := storage.Reader(ctx, config.LibraryDb)
 		if err != nil {
 			return tracing.Error(span, err)
 		}
