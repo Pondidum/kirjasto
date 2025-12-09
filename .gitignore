@@ -1,4 +1,4 @@
 kirjasto
 .data
 dev.sqlite*
-fts.sqlite*
+openlibrary.sqlite*
