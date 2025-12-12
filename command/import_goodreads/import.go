@@ -172,6 +172,8 @@ func processFile(ctx context.Context, openlib *openlibrary.Client, library *doma
 		lines++
 
 		book := asBookImport(span, reviews, line)
+		fmt.Printf("%s, %s\n", book.Title, book.Author)
+
 		if err := library.ImportBook(book); err != nil {
 			return tracing.Error(span, err)
 		}
