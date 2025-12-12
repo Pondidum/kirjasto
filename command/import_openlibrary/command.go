@@ -135,8 +135,7 @@ func (c *ImportCommand) addIndexes(ctx context.Context, writer *sql.DB) error {
 	defer span.End()
 
 	statements := []string{
-		"create index if not exists editions_authors_link_edition_idx on editions_authors_link(edition_id)",
-		"create index if not exists editions_authors_link_author_idx on editions_authors_link(author_id)",
+		"create index if not exists editions_authors_link_idx on editions_authors_link(edition_id, author_id)",
 		"create index if not exists editions_isbns_link_isbn_idx on editions_isbns_link(isbn)",
 		"create index if not exists editions_works_link_editions_idx on editions_works_link(edition_id)",
 		"create index if not exists editions_works_link_works_idx on editions_works_link(work_id)",
