@@ -165,11 +165,10 @@ func (l *Library) onBookAdded(e BookAdded) {
 }
 
 type BookInfoAdded struct {
-	Info *openlibrary.Book
+	Info openlibrary.Book
 }
 
-func (l *Library) AddBookInfo(info *openlibrary.Book) error {
-
+func (l *Library) AddBookInfo(info openlibrary.Book) error {
 	for _, isbn := range info.Isbns {
 		if _, found := l.knownIsbns[isbn]; found {
 			return nil

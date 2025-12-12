@@ -5,7 +5,6 @@ import (
 	"kirjasto/config"
 	"kirjasto/domain"
 	"kirjasto/openlibrary"
-	"kirjasto/storage"
 	"kirjasto/tracing"
 
 	"github.com/spf13/pflag"
@@ -47,11 +46,11 @@ func (c *AddCommand) Execute(ctx context.Context, config *config.Config, args []
 		return tracing.Errorf(span, "The books must have at least one of: isbn, title")
 	}
 
-	reader, err := storage.Reader(ctx, config.OpenLibraryDb)
+	openlib, err := openlibrary.NewClient(ctx, config.OpenLibraryDb)
 	if err != nil {
 		return tracing.Error(span, err)
 	}
-	bookInfo, err := openlibrary.FindBook(ctx, reader, c.book.Title, c.book.Isbns)
+	bookInfo, err := openlib.FindBook(ctx, c.book.Title, c.book.Isbns)
 	if err != nil {
 		return tracing.Error(span, err)
 	}
@@ -61,10 +60,11 @@ func (c *AddCommand) Execute(ctx context.Context, config *config.Config, args []
 			return err
 		}
 
-		if err := library.AddBookInfo(bookInfo); err != nil {
-			return err
+		if bookInfo != nil {
+			if err := library.AddBookInfo(*bookInfo); err != nil {
+				return err
+			}
 		}
-
 		return nil
 	})
 	if err != nil {

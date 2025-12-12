@@ -5,7 +5,6 @@ import (
 	"kirjasto/config"
 	"kirjasto/openlibrary"
 	"kirjasto/routing"
-	"kirjasto/storage"
 	"kirjasto/template"
 	"net/http"
 
@@ -30,14 +29,14 @@ func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.Serv
 		}
 		dto["QueryParams"] = form
 
-		reader, err := storage.Reader(ctx, config.OpenLibraryDb)
+		openlib, err := openlibrary.NewClient(ctx, config.OpenLibraryDb)
 		if err != nil {
 			return err
 		}
 
 		if query, found := form["query"]; found {
 
-			books, err := openlibrary.FindBooks(ctx, reader, query)
+			books, err := openlib.FindBooks(ctx, query)
 			if err != nil {
 				return err
 			}

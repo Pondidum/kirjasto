@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"kirjasto/config"
 	"kirjasto/openlibrary"
-	"kirjasto/storage"
 	"kirjasto/tracing"
 	"kirjasto/util/columnize"
 
@@ -41,12 +40,12 @@ func (c *SearchCommand) Execute(ctx context.Context, config *config.Config, args
 
 	searchTerm := args[0]
 
-	reader, err := storage.Reader(ctx, config.OpenLibraryDb)
+	openlib, err := openlibrary.NewClient(ctx, config.OpenLibraryDb)
 	if err != nil {
 		return tracing.Error(span, err)
 	}
 
-	books, err := openlibrary.FindBooks(ctx, reader, searchTerm)
+	books, err := openlib.FindBooks(ctx, searchTerm)
 	if err != nil {
 		return tracing.Error(span, err)
 	}

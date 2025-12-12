@@ -33,7 +33,7 @@ func (v *LibraryView) forBook(isbns []string) []*LibraryEntry {
 }
 
 type LibraryEntry struct {
-	*openlibrary.Book
+	openlibrary.Book
 
 	Added time.Time
 	Tags  []string
@@ -98,7 +98,7 @@ func (p *LibraryProjection) onBookInfoAdded(ctx context.Context, view *LibraryVi
 func newLibraryEntry(book Book) *LibraryEntry {
 
 	le := &LibraryEntry{
-		Book: &openlibrary.Book{
+		Book: openlibrary.Book{
 			Title:   book.Title,
 			Authors: []openlibrary.Author{{Name: book.Author}},
 			Isbns:   book.Isbns,

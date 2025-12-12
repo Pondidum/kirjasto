@@ -73,7 +73,12 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		library = domain.NewLibrary(domain.LibraryID)
 	}
 
-	if err := processFile(ctx, db, library, filePath); err != nil {
+	openlib, err := openlibrary.NewClient(ctx, config.OpenLibraryDb)
+	if err != nil {
+		return tracing.Error(span, err)
+	}
+
+	if err := processFile(ctx, openlib, library, filePath); err != nil {
 		return tracing.Error(span, err)
 	}
 
@@ -133,7 +138,7 @@ type reviewEntry struct {
 	UpdatedAt  time.Time
 }
 
-func processFile(ctx context.Context, db openlibrary.Readable, library *domain.Library, filePath string) error {
+func processFile(ctx context.Context, openlib *openlibrary.Client, library *domain.Library, filePath string) error {
 	ctx, span := tr.Start(ctx, "process_file")
 	defer span.End()
 
@@ -171,12 +176,16 @@ func processFile(ctx context.Context, db openlibrary.Readable, library *domain.L
 			return tracing.Error(span, err)
 		}
 
-		info, err := openlibrary.FindBook(ctx, db, book.Title, book.Isbns)
+		info, err := openlib.FindBook(ctx, book.Title, book.Isbns)
 		if err != nil {
 			return tracing.Error(span, err)
 		}
 
-		if err := library.AddBookInfo(info); err != nil {
+		if info == nil {
+			continue
+		}
+
+		if err := library.AddBookInfo(*info); err != nil {
 			return tracing.Error(span, err)
 		}
 	}
