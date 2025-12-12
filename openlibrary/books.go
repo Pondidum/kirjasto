@@ -30,6 +30,7 @@ type Book struct {
 }
 
 type bookResult struct {
+	rank        int
 	editionJson string
 	authorJson  string
 	err         error
@@ -38,13 +39,14 @@ type bookResult struct {
 func bookResultRows(rows *sql.Rows) iter.Seq[bookResult] {
 	return func(yield func(bookResult) bool) {
 
-		var editionJson string
-		var authorJson string
+		rank := -1
 
 		for rows.Next() {
+			var editionJson string
+			var authorJson string
 			err := rows.Scan(&editionJson, &authorJson)
 
-			if !yield(bookResult{editionJson, authorJson, err}) {
+			if !yield(bookResult{rank, editionJson, authorJson, err}) {
 				break
 			}
 		}
@@ -57,14 +59,10 @@ func buildResults(ctx context.Context, rows iter.Seq[bookResult]) ([]*Book, erro
 
 	groups := map[string][]*Book{}
 
-	rank := -1
-
 	for bookRow := range rows {
 		if bookRow.err != nil {
 			return nil, tracing.Error(span, bookRow.err)
 		}
-
-		rank++
 
 		authors, err := authorsFromJson(bookRow.authorJson)
 		if err != nil {
@@ -84,7 +82,7 @@ func buildResults(ctx context.Context, rows iter.Seq[bookResult]) ([]*Book, erro
 				Isbns:          append(editionDto.Isbn13, editionDto.Isbn10...),
 				Authors:        authors,
 				Covers:         editionDto.Covers,
-				rank:           rank,
+				rank:           bookRow.rank,
 				openLibraryKey: editionDto.Key,
 			}
 
