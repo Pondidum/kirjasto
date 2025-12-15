@@ -3,6 +3,8 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
+	"fmt"
 	"kirjasto/tracing"
 	"net/url"
 	"os"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/XSAM/otelsql"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -43,7 +46,14 @@ func Reader(ctx context.Context, dbPath string) (*sql.DB, error) {
 	ctx, span := tr.Start(ctx, "open_reader")
 	defer span.End()
 
-	db, err := otelsql.Open("sqlite3", connectionString(dbPath))
+	// you can't set this config option any other way, and I want correct semconv attributes.
+	os.Setenv("OTEL_SEMCONV_STABILITY_OPT_IN", "database")
+	db, err := otelsql.Open(
+		"sqlite3",
+		connectionString(dbPath),
+		otelsql.WithAttributesGetter(addQueryParams),
+	)
+
 	if err != nil {
 		return nil, tracing.Error(span, err)
 	}
@@ -76,4 +86,12 @@ func withPragmas(ctx context.Context, db *sql.DB) error {
 	}
 
 	return nil
+}
+
+func addQueryParams(ctx context.Context, method otelsql.Method, query string, args []driver.NamedValue) []attribute.KeyValue {
+	attrs := make([]attribute.KeyValue, len(args))
+	for i, arg := range args {
+		attrs[i] = attribute.String("db.query.parameter."+arg.Name, fmt.Sprint(arg.Value))
+	}
+	return attrs
 }
