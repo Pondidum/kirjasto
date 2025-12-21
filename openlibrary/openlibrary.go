@@ -3,7 +3,6 @@ package openlibrary
 import (
 	"context"
 	"database/sql"
-	"iter"
 	"kirjasto/storage"
 	"kirjasto/tracing"
 	"slices"
@@ -29,7 +28,7 @@ func NewClient(ctx context.Context, dbPath string) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) FindBooksByIsbn(ctx context.Context, isbn string) (iter.Seq[*Book], error) {
+func (c *Client) FindBooksByIsbn(ctx context.Context, isbn string) ([]*Book, error) {
 	ctx, span := tr.Start(ctx, "find_book_by_isbn")
 	defer span.End()
 
@@ -41,10 +40,12 @@ func (c *Client) FindBooksByIsbn(ctx context.Context, isbn string) (iter.Seq[*Bo
 				from editions_authors_link eal
 				join authors a on a.id = eal.author_id
 				where eal.edition_id  = e.id
-			)
+			) 
 		from editions e
+		join editions_works_link ewl on ewl.edition_id = e.id
 		join editions_isbns_link eil on eil.edition_id = e.id
 		where eil.isbn = @isbn
+		group by ewl.work_id
 	`
 
 	rows, err := c.reader.QueryContext(ctx, query, sql.Named("isbn", isbn))
@@ -52,13 +53,7 @@ func (c *Client) FindBooksByIsbn(ctx context.Context, isbn string) (iter.Seq[*Bo
 		return nil, tracing.Error(span, err)
 	}
 
-	results := bookResultRows(rows)
-	books, err := buildResults(ctx, results)
-	if err != nil {
-		return nil, tracing.Error(span, err)
-	}
-
-	return books, nil
+	return asBooks(rows)
 }
 
 func (c *Client) FindBooksByTitle(ctx context.Context, search string) ([]*Book, error) {
@@ -73,26 +68,20 @@ func (c *Client) FindBooksByTitle(ctx context.Context, search string) ([]*Book, 
 				from editions_authors_link eal
 				join authors a on a.id = eal.author_id
 				where eal.edition_id  = e.id
-			) --,
-			-- highlight(editions_fts, 1, '{{', '}}')
+			)
 		from editions e
-		join editions_fts fts on e.id = fts.edition_id
+		join editions_fts fts on fts.edition_id = e.id
+		join editions_works_link ewl on ewl.edition_id = e.id
 		where editions_fts match @term
-		order by rank
+		group by ewl.work_id
+		order by min(rank)
 	`
-
 	rows, err := c.reader.QueryContext(ctx, query, sql.Named("term", search))
 	if err != nil {
 		return nil, tracing.Error(span, err)
 	}
 
-	results := bookResultRows(rows)
-	books, err := buildResults(ctx, results)
-	if err != nil {
-		return nil, tracing.Error(span, err)
-	}
-
-	return books, nil
+	return asBooks(rows)
 }
 
 func (c *Client) FindBook(ctx context.Context, title string, isbns []string) (*Book, error) {
@@ -109,9 +98,40 @@ func (c *Client) FindBook(ctx context.Context, title string, isbns []string) (*B
 		if err != nil {
 			return nil, err
 		}
-		if len(books) != 0 {
+		if len(books) > 0 {
 			return books[0], nil
 		}
+	}
+
+	cleanedTitle := storage.FtsEscape(title)
+
+	books, err := c.FindBooksByTitle(ctx, cleanedTitle)
+	if err != nil {
+		return nil, err
+	}
+	if len(books) > 0 {
+		return books[0], nil
+	}
+
+	return nil, nil
+}
+
+func (c *Client) FindBooks(ctx context.Context, title string, isbns []string) ([]*Book, error) {
+	ctx, span := tr.Start(ctx, "find_book")
+	defer span.End()
+
+	// prefer longer isbns
+	slices.SortFunc(isbns, func(a, b string) int {
+		return len(b) - len(a)
+	})
+
+	allResults := []*Book{}
+	for _, isbn := range isbns {
+		books, err := c.FindBooksByIsbn(ctx, isbn)
+		if err != nil {
+			return nil, err
+		}
+		allResults = append(allResults, books...)
 	}
 
 	cleaned := strings.ReplaceAll(title, ":", "")
@@ -119,9 +139,7 @@ func (c *Client) FindBook(ctx context.Context, title string, isbns []string) (*B
 	if err != nil {
 		return nil, err
 	}
-	if len(books) != 0 {
-		return books[0], nil
-	}
+	allResults = append(allResults, books...)
 
-	return nil, nil
+	return allResults, nil
 }

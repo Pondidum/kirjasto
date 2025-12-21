@@ -36,7 +36,7 @@ func RegisterHandlers(ctx context.Context, config *config.Config, mux *http.Serv
 
 		if query, found := form["query"]; found {
 
-			books, err := openlib.FindBooks(ctx, query)
+			books, err := openlib.FindBooks(ctx, query, []string{query})
 			if err != nil {
 				return err
 			}

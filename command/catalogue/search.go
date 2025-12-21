@@ -45,7 +45,7 @@ func (c *SearchCommand) Execute(ctx context.Context, config *config.Config, args
 		return tracing.Error(span, err)
 	}
 
-	books, err := openlib.FindBooks(ctx, searchTerm)
+	books, err := openlib.FindBooks(ctx, searchTerm, []string{searchTerm})
 	if err != nil {
 		return tracing.Error(span, err)
 	}
