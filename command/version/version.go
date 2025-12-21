@@ -34,6 +34,10 @@ func NewVersionCommand() *VersionCommand {
 type VersionCommand struct {
 }
 
+func (c *VersionCommand) Name() string {
+	return "version"
+}
+
 func (c *VersionCommand) Synopsis() string {
 	return "prints the version number"
 }

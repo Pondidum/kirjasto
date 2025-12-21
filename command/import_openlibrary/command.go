@@ -26,6 +26,10 @@ func NewImportCommand() *ImportCommand {
 type ImportCommand struct {
 }
 
+func (c *ImportCommand) Name() string {
+	return "import openlibrary"
+}
+
 func (c *ImportCommand) Synopsis() string {
 	return "import openlibrary"
 }

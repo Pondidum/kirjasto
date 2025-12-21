@@ -17,6 +17,7 @@ import (
 )
 
 type CommandDefinition interface {
+	Name() string
 	Synopsis() string
 	Flags() *pflag.FlagSet
 	Execute(ctx context.Context, cfg *config.Config, args []string) error
@@ -62,7 +63,7 @@ func (c *command) Run(args []string) int {
 	defer shutdown(context.Background())
 
 	tr := otel.Tracer("kirjasto")
-	ctx, span := tr.Start(ctx, "main")
+	ctx, span := tr.Start(ctx, c.Name())
 	defer span.End()
 
 	flags := c.Flags()

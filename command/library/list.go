@@ -20,6 +20,10 @@ type ListCommand struct {
 	statsOnly bool
 }
 
+func (c *ListCommand) Name() string {
+	return "library list"
+}
+
 func (c *ListCommand) Synopsis() string {
 	return "list the library contents"
 }

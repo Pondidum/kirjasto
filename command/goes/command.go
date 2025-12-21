@@ -21,6 +21,10 @@ func NewGoesCommand() *GoesProjectionCommand {
 type GoesProjectionCommand struct {
 }
 
+func (c *GoesProjectionCommand) Name() string {
+	return "goes rebuild views"
+}
+
 func (c *GoesProjectionCommand) Synopsis() string {
 	return "rerun the projections"
 }

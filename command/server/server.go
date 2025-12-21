@@ -24,6 +24,10 @@ type ServerCommand struct {
 	address string
 }
 
+func (c *ServerCommand) Name() string {
+	return "server"
+}
+
 func (c *ServerCommand) Synopsis() string {
 	return "runs the server"
 }

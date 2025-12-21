@@ -17,21 +17,22 @@ import (
 
 func main() {
 
-	commands := map[string]cli.CommandFactory{
-		"version": command.NewCommand(version.NewVersionCommand()),
-		"server":  command.NewCommand(server.NewServerCommand()),
+	defs := []command.CommandDefinition{
+		version.NewVersionCommand(),
+		server.NewServerCommand(),
+		import_openlibrary.NewImportCommand(),
+		import_goodreads.NewImportCommand(),
+		catalogue.NewSearchCommand(),
+		library.NewListCommand(),
+		library.NewAddCommand(),
+		library.NewStartCommand(),
+		library.NewFinishCommand(),
+		goes.NewGoesCommand(),
+	}
 
-		"import openlibrary": command.NewCommand(import_openlibrary.NewImportCommand()),
-		"import goodreads":   command.NewCommand(import_goodreads.NewImportCommand()),
-
-		"catalogue search": command.NewCommand(catalogue.NewSearchCommand()),
-
-		"library list":   command.NewCommand(library.NewListCommand()),
-		"library add":    command.NewCommand(library.NewAddCommand()),
-		"library start":  command.NewCommand(library.NewStartCommand()),
-		"library finish": command.NewCommand(library.NewFinishCommand()),
-
-		"goes rebuild views": command.NewCommand(goes.NewGoesCommand()),
+	commands := make(map[string]cli.CommandFactory, len(defs))
+	for _, def := range defs {
+		commands[def.Name()] = command.NewCommand(def)
 	}
 
 	cli := &cli.CLI{

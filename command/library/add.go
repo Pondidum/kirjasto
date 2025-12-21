@@ -24,6 +24,10 @@ type AddCommand struct {
 	tags []string
 }
 
+func (c *AddCommand) Name() string {
+	return "library add"
+}
+
 func (c *AddCommand) Synopsis() string {
 	return "add a book to the library"
 }

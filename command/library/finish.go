@@ -18,6 +18,10 @@ type FinishCommand struct {
 	when string
 }
 
+func (c *FinishCommand) Name() string {
+	return "library finish"
+}
+
 func (c *FinishCommand) Synopsis() string {
 	return "mark a book at in-progress"
 }

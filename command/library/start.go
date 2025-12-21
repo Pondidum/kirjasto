@@ -18,6 +18,10 @@ type StartCommand struct {
 	when string
 }
 
+func (c *StartCommand) Name() string {
+	return "library start"
+}
+
 func (c *StartCommand) Synopsis() string {
 	return "mark a book at in-progress"
 }

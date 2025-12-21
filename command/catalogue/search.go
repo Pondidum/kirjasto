@@ -21,6 +21,10 @@ func NewSearchCommand() *SearchCommand {
 type SearchCommand struct {
 }
 
+func (c *SearchCommand) Name() string {
+	return "catalogue search"
+}
+
 func (c *SearchCommand) Synopsis() string {
 	return "search the catalogue for books"
 }

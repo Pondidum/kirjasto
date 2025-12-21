@@ -33,6 +33,10 @@ func NewImportCommand() *ImportCommand {
 type ImportCommand struct {
 }
 
+func (c *ImportCommand) Name() string {
+	return "import goodreads"
+}
+
 func (c *ImportCommand) Synopsis() string {
 	return "import goodreads library"
 }
