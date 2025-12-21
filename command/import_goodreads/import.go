@@ -176,7 +176,7 @@ func processFile(ctx context.Context, openlib *openlibrary.Client, library *doma
 		lines++
 
 		book := asBookImport(span, reviews, line)
-		fmt.Printf("%s, %s\n", book.Title, book.Author)
+		fmt.Printf("%s, %s...", book.Title, book.Author)
 
 		if err := library.ImportBook(book); err != nil {
 			return tracing.Error(span, err)
@@ -188,8 +188,11 @@ func processFile(ctx context.Context, openlib *openlibrary.Client, library *doma
 		}
 
 		if info == nil {
+			fmt.Println("no openlibrary data found")
 			continue
 		}
+
+		fmt.Println("added openlibrary data")
 
 		if err := library.AddBookInfo(*info); err != nil {
 			return tracing.Error(span, err)

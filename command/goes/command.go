@@ -48,12 +48,11 @@ func (c *GoesProjectionCommand) Execute(ctx context.Context, config *config.Conf
 		return tracing.Error(span, err)
 	}
 
-	projection := domain.NewLibraryProjection()
-	if err := eventStore.RegisterProjection("library_view", projection); err != nil {
+	if err := domain.RegisterProjections(eventStore); err != nil {
 		return tracing.Error(span, err)
 	}
 
-	if err := eventStore.Rebuild(ctx, projection.SqlProjection); err != nil {
+	if err := eventStore.RebuildAll(ctx); err != nil {
 		return tracing.Error(span, err)
 	}
 

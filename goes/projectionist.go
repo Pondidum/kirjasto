@@ -32,12 +32,12 @@ func (p *Projectionist) Load(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
-func (p *Projectionist) Project(ctx context.Context, event EventDescriptor) error {
+func (p *Projectionist) Project(ctx context.Context, tx *sql.Tx, event EventDescriptor) error {
 	ctx, span := tr.Start(ctx, "project")
 	defer span.End()
 
 	for _, projection := range p.projections {
-		if err := projection.Project(ctx, event); err != nil {
+		if err := projection.Project(ctx, tx, event); err != nil {
 			return tracing.Error(span, err)
 		}
 	}
@@ -51,6 +51,19 @@ func (p *Projectionist) Save(ctx context.Context, tx *sql.Tx) error {
 
 	for _, projection := range p.projections {
 		if err := projection.Save(ctx, tx); err != nil {
+			return tracing.Error(span, err)
+		}
+	}
+
+	return nil
+}
+
+func (p *Projectionist) Wipe(ctx context.Context, tx *sql.Tx) error {
+	ctx, span := tr.Start(ctx, "wipe")
+	defer span.End()
+
+	for _, projection := range p.projections {
+		if err := projection.Wipe(ctx, tx); err != nil {
 			return tracing.Error(span, err)
 		}
 	}

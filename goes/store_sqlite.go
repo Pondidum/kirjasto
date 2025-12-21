@@ -89,7 +89,7 @@ func (s *SqliteStore) Save(ctx context.Context, aggregateID uuid.UUID, sequence 
 		if err := writer.Write(ctx, event); err != nil {
 			return err
 		}
-		if err := s.projections.Project(ctx, event); err != nil {
+		if err := s.projections.Project(ctx, tx, event); err != nil {
 			return tracing.Error(span, err)
 		}
 	}
@@ -204,7 +204,7 @@ func (s *SqliteStore) allEvents(ctx context.Context, tx *sql.Tx) iter.Seq2[Event
 	}
 }
 
-func (s *SqliteStore) Rebuild(ctx context.Context, projection Projection) error {
+func (s *SqliteStore) RebuildAll(ctx context.Context) error {
 	ctx, span := tr.Start(ctx, "rebuild")
 	defer span.End()
 
@@ -214,11 +214,11 @@ func (s *SqliteStore) Rebuild(ctx context.Context, projection Projection) error 
 	}
 	defer tx.Rollback()
 
-	if err := projection.Load(ctx, tx); err != nil {
+	if err := s.projections.Load(ctx, tx); err != nil {
 		return tracing.Error(span, err)
 	}
 
-	if err := projection.Wipe(ctx); err != nil {
+	if err := s.projections.Wipe(ctx, tx); err != nil {
 		return tracing.Error(span, err)
 	}
 
@@ -227,12 +227,12 @@ func (s *SqliteStore) Rebuild(ctx context.Context, projection Projection) error 
 			return tracing.Error(span, err)
 		}
 
-		if err := projection.Project(ctx, event); err != nil {
+		if err := s.projections.Project(ctx, tx, event); err != nil {
 			return tracing.Error(span, err)
 		}
 	}
 
-	if err := projection.Save(ctx, tx); err != nil {
+	if err := s.projections.Save(ctx, tx); err != nil {
 		return tracing.Error(span, err)
 	}
 

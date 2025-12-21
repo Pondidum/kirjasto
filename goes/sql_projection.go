@@ -45,7 +45,6 @@ func NewSqlProjection[TView any](createView func() *TView) *SqlProjection[TView]
 }
 
 type SqlProjection[TView any] struct {
-	Tx         *sql.Tx
 	cache      map[uuid.UUID]*viewDescriptor[TView]
 	createView func() *TView
 	handlers   map[string]func(ctx context.Context, view *TView, event any) error
@@ -81,7 +80,6 @@ func AddProjectionHandler[TView any, TEvent any](p *SqlProjection[TView], projec
 }
 
 func (p *SqlProjection[TView]) Load(ctx context.Context, tx *sql.Tx) error {
-	p.Tx = tx
 	clear(p.cache)
 
 	// create the table
@@ -91,13 +89,13 @@ func (p *SqlProjection[TView]) Load(ctx context.Context, tx *sql.Tx) error {
 	return nil
 }
 
-func (p *SqlProjection[TView]) Project(ctx context.Context, event EventDescriptor) error {
+func (p *SqlProjection[TView]) Project(ctx context.Context, tx *sql.Tx, event EventDescriptor) error {
 
 	vd, found := p.cache[event.AggregateID]
 	if !found {
 
 		// load
-		row := p.Tx.QueryRowContext(ctx,
+		row := tx.QueryRowContext(ctx,
 			p.readView,
 			sql.Named("aggregate_id", event.AggregateID.String()),
 		)
@@ -144,7 +142,7 @@ func (p *SqlProjection[TView]) Save(ctx context.Context, tx *sql.Tx) error {
 			return err
 		}
 
-		_, err = p.Tx.ExecContext(ctx, p.updateView,
+		_, err = tx.ExecContext(ctx, p.updateView,
 			sql.Named("aggregate_id", vd.AggregateID.String()),
 			sql.Named("view", json),
 		)
@@ -155,13 +153,12 @@ func (p *SqlProjection[TView]) Save(ctx context.Context, tx *sql.Tx) error {
 	}
 
 	clear(p.cache)
-	p.Tx = nil
 	return nil
 }
 
-func (p *SqlProjection[TView]) Wipe(ctx context.Context) error {
+func (p *SqlProjection[TView]) Wipe(ctx context.Context, tx *sql.Tx) error {
 
-	_, err := p.Tx.ExecContext(ctx, p.deleteAllViews)
+	_, err := tx.ExecContext(ctx, p.deleteAllViews)
 	if err != nil {
 		return err
 	}
