@@ -14,6 +14,7 @@ type LibraryCreated struct {
 type BookImported struct {
 	Book Book
 
+	BookId    int
 	Tags      []string
 	Rating    int
 	ReadCount int
@@ -24,19 +25,14 @@ type BookImported struct {
 
 type BookAdded struct {
 	Book      Book
+	BookId    int
 	Tags      []string
 	DateAdded time.Time
 }
 
-type Book struct {
-	Isbns       []string
-	Title       string
-	Author      string
-	PublishYear int
-}
-
 type BookInfoAdded struct {
-	Info openlibrary.Book
+	BookId int
+	Info   openlibrary.Book
 }
 
 type BookStarted struct {

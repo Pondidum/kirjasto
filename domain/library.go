@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"fmt"
 	"kirjasto/goes"
 	"kirjasto/openlibrary"
 	"kirjasto/tracing"
@@ -17,8 +18,7 @@ var LibraryID uuid.UUID = uuid.MustParse("89ea74d8-1960-41cc-b795-2d843f02c0aa")
 
 func blankLibrary() *Library {
 	library := &Library{
-		state:      goes.NewAggregateState(),
-		knownIsbns: map[string]bool{},
+		state: goes.NewAggregateState(),
 	}
 
 	goes.Register(library.state, library.onLibraryCreated)
@@ -62,7 +62,8 @@ func SaveLibrary(ctx context.Context, eventStore *goes.SqliteStore, library *Lib
 type Library struct {
 	state *goes.AggregateState
 
-	knownIsbns map[string]bool
+	Books      []LibraryBook
+	nextBookId int
 }
 
 func (l *Library) onLibraryCreated(e LibraryCreated) {
@@ -83,19 +84,14 @@ type ImportData struct {
 	DateRead  time.Time
 }
 
-func (l *Library) ImportBook(info ImportData) error {
+func (l *Library) ImportBook(info ImportData) (int, error) {
 
-	for _, isbn := range info.Isbns {
-		if _, found := l.knownIsbns[isbn]; found {
-			return nil
-		}
-	}
-
-	return goes.Apply(l.state, BookImported{
+	bookImport := BookImported{
+		BookId: l.nextBookId,
 		Book: Book{
 			Isbns:       info.Isbns,
 			Title:       info.Title,
-			Author:      info.Author,
+			Authors:     []string{info.Author},
 			PublishYear: info.PublishYear,
 		},
 
@@ -105,49 +101,73 @@ func (l *Library) ImportBook(info ImportData) error {
 
 		DateAdded: info.DateAdded,
 		DateRead:  info.DateRead,
-	})
+	}
+
+	return bookImport.BookId, goes.Apply(l.state, bookImport)
 }
 
 func (l *Library) onBookImported(e BookImported) {
-
-	for _, isbn := range e.Book.Isbns {
-		l.knownIsbns[isbn] = true
+	l.nextBookId++
+	lb := LibraryBook{
+		ID:    e.BookId,
+		Book:  e.Book,
+		Added: e.DateAdded,
+		Tags:  e.Tags,
 	}
+	if !e.DateRead.IsZero() {
+		lb.State = "read"
+	}
+
+	l.Books = append(l.Books, lb)
 }
 
-func (l *Library) AddBook(book Book, tags []string) error {
-
-	for _, isbn := range book.Isbns {
-		if _, found := l.knownIsbns[isbn]; found {
-			return nil
-		}
-	}
-
-	return goes.Apply(l.state, BookAdded{
+func (l *Library) AddBook(book Book, tags []string) (int, error) {
+	added := BookAdded{
+		BookId:    l.nextBookId,
 		Book:      book,
 		Tags:      tags,
 		DateAdded: time.Now(),
-	})
+	}
+
+	return added.BookId, goes.Apply(l.state, added)
 }
 
 func (l *Library) onBookAdded(e BookAdded) {
-	for _, isbn := range e.Book.Isbns {
-		l.knownIsbns[isbn] = true
+	l.nextBookId++
+	lb := LibraryBook{
+		ID:    e.BookId,
+		Book:  e.Book,
+		Added: e.DateAdded,
+		Tags:  e.Tags,
 	}
+
+	l.Books = append(l.Books, lb)
 }
 
-func (l *Library) AddBookInfo(info openlibrary.Book) error {
-	for _, isbn := range info.Isbns {
-		if _, found := l.knownIsbns[isbn]; found {
-			return nil
+func (l *Library) AddBookInfo(bookId int, info openlibrary.Book) error {
+
+	found := false
+	for _, lb := range l.Books {
+		if lb.ID == bookId {
+			found = true
+			break
 		}
 	}
 
-	return goes.Apply(l.state, BookInfoAdded{Info: info})
+	if !found {
+		return fmt.Errorf("no book found for id '%v'", bookId)
+	}
+
+	return goes.Apply(l.state, BookInfoAdded{BookId: bookId, Info: info})
 }
 
 func (l *Library) onBookInfoAdded(e BookInfoAdded) {
-
+	for _, book := range l.Books {
+		if book.ID == e.BookId {
+			book.Apply(e.Info)
+			return
+		}
+	}
 }
 
 func (l *Library) StartReading(isbn string, when time.Time) error {

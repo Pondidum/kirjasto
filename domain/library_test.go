@@ -24,3 +24,9 @@ func TestIsbnSorting(t *testing.T) {
 		"0107717204",
 	}, isbns)
 }
+
+func TestAddingBooks(t *testing.T) {
+	l := blankLibrary()
+
+	l.AddBook()
+}

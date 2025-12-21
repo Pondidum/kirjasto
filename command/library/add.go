@@ -36,7 +36,7 @@ func (c *AddCommand) Flags() *pflag.FlagSet {
 	flags := pflag.NewFlagSet("add", pflag.ContinueOnError)
 	flags.StringSliceVar(&c.book.Isbns, "isbn", []string{}, "the book's isbn(s)")
 	flags.StringVar(&c.book.Title, "title", "", "the book's title")
-	flags.StringVar(&c.book.Author, "author", "", "the book's author")
+	flags.StringSliceVar(&c.book.Authors, "author", []string{}, "the book's authors")
 	flags.IntVar(&c.book.PublishYear, "publish-year", 0, "the year the book was published")
 	flags.StringSliceVar(&c.tags, "tags", []string{}, "tags to add to the book")
 	return flags
@@ -60,12 +60,13 @@ func (c *AddCommand) Execute(ctx context.Context, config *config.Config, args []
 	}
 
 	err = libraryAction(ctx, config, func(library *domain.Library) error {
-		if err := library.AddBook(c.book, c.tags); err != nil {
+		bookId, err := library.AddBook(c.book, c.tags)
+		if err != nil {
 			return err
 		}
 
 		if bookInfo != nil {
-			if err := library.AddBookInfo(*bookInfo); err != nil {
+			if err := library.AddBookInfo(bookId, *bookInfo); err != nil {
 				return err
 			}
 		}
