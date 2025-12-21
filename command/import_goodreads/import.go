@@ -65,7 +65,7 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		return tracing.Error(span, err)
 	}
 
-	if err := eventStore.RegisterProjection("library_view", domain.NewLibraryProjection()); err != nil {
+	if err := domain.RegisterProjections(eventStore); err != nil {
 		return tracing.Error(span, err)
 	}
 

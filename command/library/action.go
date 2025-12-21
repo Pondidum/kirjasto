@@ -20,7 +20,7 @@ func libraryAction(ctx context.Context, config *config.Config, action func(libra
 
 	store := goes.NewSqliteStore(writer)
 
-	if err := store.RegisterProjection("library_view", domain.NewLibraryProjection()); err != nil {
+	if err := domain.RegisterProjections(store); err != nil {
 		return tracing.Error(span, err)
 	}
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"kirjasto/config"
 	"kirjasto/domain"
+	"kirjasto/goes"
 	"kirjasto/storage"
 	"kirjasto/tracing"
 	"kirjasto/util/columnize"
@@ -43,11 +44,8 @@ func (c *ListCommand) Execute(ctx context.Context, config *config.Config, args [
 		return tracing.Error(span, err)
 	}
 
-	p := domain.NewLibraryProjection()
-	library, err := p.View(ctx, reader, domain.LibraryID)
-	if err != nil {
-		return tracing.Error(span, err)
-	}
+	eventStore := goes.NewSqliteStore(reader)
+	library, err := domain.LoadLibrary(ctx, eventStore, domain.LibraryID)
 
 	c.printStats(ctx, library)
 	if c.statsOnly {
@@ -70,7 +68,7 @@ func (c *ListCommand) Execute(ctx context.Context, config *config.Config, args [
 	return nil
 }
 
-func (c *ListCommand) printStats(ctx context.Context, library *domain.LibraryView) {
+func (c *ListCommand) printStats(ctx context.Context, library *domain.Library) {
 	read := 0
 	unread := 0
 
