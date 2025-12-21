@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"kirjasto/config"
 	"kirjasto/tracing"
-	"kirjasto/ui"
 	"net/http"
 
 	"github.com/spf13/pflag"
@@ -43,10 +42,6 @@ func (c *ServerCommand) Execute(ctx context.Context, config *config.Config, args
 	defer span.End()
 
 	mux := http.NewServeMux()
-
-	if err := ui.RegisterUI(ctx, config, mux); err != nil {
-		return tracing.Error(span, err)
-	}
 
 	server := &http.Server{
 		Addr:    c.address,

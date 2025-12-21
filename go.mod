@@ -6,10 +6,7 @@ require (
 	github.com/XSAM/otelsql v0.40.0
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.4
-	github.com/fsnotify/fsnotify v1.8.0
-	github.com/go-viper/mapstructure/v2 v2.2.1
 	github.com/google/uuid v1.6.0
-	github.com/gorilla/websocket v1.5.3
 	github.com/hashicorp/cli v1.1.7
 	github.com/mattn/go-sqlite3 v1.14.24
 	github.com/spf13/pflag v1.0.6
