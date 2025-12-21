@@ -12,6 +12,13 @@ type LibraryView struct {
 	ByIsbn map[string]int
 }
 
+func newLibraryView() *LibraryView {
+	return &LibraryView{
+		Books:  []*LibraryEntry{},
+		ByIsbn: map[string]int{},
+	}
+}
+
 func (v *LibraryView) addLibraryEntry(le *LibraryEntry) {
 	index := len(v.Books)
 	v.Books = append(v.Books, le)
@@ -48,7 +55,7 @@ type LibraryProjection struct {
 
 func NewLibraryProjection() *LibraryProjection {
 	projection := &LibraryProjection{
-		SqlProjection: goes.NewSqlProjection[LibraryView](),
+		SqlProjection: goes.NewSqlProjection(newLibraryView),
 	}
 
 	goes.AddProjectionHandler(projection.SqlProjection, projection.onLibraryCreated)

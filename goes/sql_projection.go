@@ -15,12 +15,13 @@ type viewDescriptor[TView any] struct {
 	View        *TView
 }
 
-func NewSqlProjection[TView any]() *SqlProjection[TView] {
+func NewSqlProjection[TView any](createView func() *TView) *SqlProjection[TView] {
 	name := reflect.TypeOf(*new(TView)).Name()
 
 	return &SqlProjection[TView]{
-		cache:    map[uuid.UUID]*viewDescriptor[TView]{},
-		handlers: map[string]func(ctx context.Context, view *TView, event any) error{},
+		createView: createView,
+		cache:      map[uuid.UUID]*viewDescriptor[TView]{},
+		handlers:   map[string]func(ctx context.Context, view *TView, event any) error{},
 
 		createTable: fmt.Sprintf(`
 			create table if not exists %s(
@@ -44,9 +45,10 @@ func NewSqlProjection[TView any]() *SqlProjection[TView] {
 }
 
 type SqlProjection[TView any] struct {
-	Tx       *sql.Tx
-	cache    map[uuid.UUID]*viewDescriptor[TView]
-	handlers map[string]func(ctx context.Context, view *TView, event any) error
+	Tx         *sql.Tx
+	cache      map[uuid.UUID]*viewDescriptor[TView]
+	createView func() *TView
+	handlers   map[string]func(ctx context.Context, view *TView, event any) error
 
 	createTable    string
 	readView       string
@@ -101,7 +103,7 @@ func (p *SqlProjection[TView]) Project(ctx context.Context, event EventDescripto
 		)
 
 		var viewJson []byte
-		view := new(TView)
+		view := p.createView()
 
 		if err := row.Scan(&viewJson); err != nil {
 			if err != sql.ErrNoRows {
