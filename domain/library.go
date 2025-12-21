@@ -65,10 +65,6 @@ type Library struct {
 	knownIsbns map[string]bool
 }
 
-type LibraryCreated struct {
-	ID uuid.UUID
-}
-
 func (l *Library) onLibraryCreated(e LibraryCreated) {
 	goes.SetID(l.state, e.ID)
 }
@@ -82,17 +78,6 @@ type ImportData struct {
 	Rating    int
 	ReadCount int
 	Shelves   []string
-
-	DateAdded time.Time
-	DateRead  time.Time
-}
-
-type BookImported struct {
-	Book Book
-
-	Tags      []string
-	Rating    int
-	ReadCount int
 
 	DateAdded time.Time
 	DateRead  time.Time
@@ -130,19 +115,6 @@ func (l *Library) onBookImported(e BookImported) {
 	}
 }
 
-type BookAdded struct {
-	Book      Book
-	Tags      []string
-	DateAdded time.Time
-}
-
-type Book struct {
-	Isbns       []string
-	Title       string
-	Author      string
-	PublishYear int
-}
-
 func (l *Library) AddBook(book Book, tags []string) error {
 
 	for _, isbn := range book.Isbns {
@@ -164,10 +136,6 @@ func (l *Library) onBookAdded(e BookAdded) {
 	}
 }
 
-type BookInfoAdded struct {
-	Info openlibrary.Book
-}
-
 func (l *Library) AddBookInfo(info openlibrary.Book) error {
 	for _, isbn := range info.Isbns {
 		if _, found := l.knownIsbns[isbn]; found {
@@ -180,11 +148,6 @@ func (l *Library) AddBookInfo(info openlibrary.Book) error {
 
 func (l *Library) onBookInfoAdded(e BookInfoAdded) {
 
-}
-
-type BookStarted struct {
-	Isbn string
-	When time.Time
 }
 
 func (l *Library) StartReading(isbn string, when time.Time) error {
@@ -200,11 +163,6 @@ func (l *Library) StartReading(isbn string, when time.Time) error {
 
 func (l *Library) onBookStarted(e BookStarted) {
 	// ?
-}
-
-type BookFinished struct {
-	Isbn string
-	When time.Time
 }
 
 func (l *Library) FinishReading(isbn string, when time.Time) error {
