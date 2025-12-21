@@ -96,6 +96,7 @@ func (p *LibraryProjection) onBookInfoAdded(ctx context.Context, view *LibraryVi
 	entries := view.forBook(event.Info.Isbns)
 
 	for _, le := range entries {
+		le.KnownBook = true
 		le.Book = event.Info
 	}
 
