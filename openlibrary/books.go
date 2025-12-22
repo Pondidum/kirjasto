@@ -1,7 +1,6 @@
 package openlibrary
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"kirjasto/domain"
@@ -15,13 +14,15 @@ type bookResult struct {
 	err         error
 }
 
-func asBooks(rows *sql.Rows) ([]*domain.BookInfo, error) {
+type scannable interface {
+	Next() bool
+	Scan(dest ...any) error
+}
+
+func asBooks(rows scannable) ([]*domain.BookInfo, error) {
 	books := []*domain.BookInfo{}
 
-	rank := -1
-
 	for rows.Next() {
-		rank++
 
 		var editionJson string
 		var authorJson string
@@ -30,7 +31,7 @@ func asBooks(rows *sql.Rows) ([]*domain.BookInfo, error) {
 			return nil, err
 		}
 
-		book, err := asBook(rank, editionJson, authorJson)
+		book, err := asBook(editionJson, authorJson)
 		if err != nil {
 			return nil, err
 		}
@@ -41,7 +42,7 @@ func asBooks(rows *sql.Rows) ([]*domain.BookInfo, error) {
 	return books, nil
 }
 
-func asBook(rank int, editionJson string, authorJson string) (*domain.BookInfo, error) {
+func asBook(editionJson string, authorJson string) (*domain.BookInfo, error) {
 
 	authors, err := authorsFromJson(authorJson)
 	if err != nil {

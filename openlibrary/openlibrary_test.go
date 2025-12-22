@@ -1,6 +1,8 @@
 package openlibrary
 
 import (
+	"errors"
+	"fmt"
 	"iter"
 	"testing"
 
@@ -9,7 +11,7 @@ import (
 
 func TestBookCreation(t *testing.T) {
 
-	rows := [][]string{
+	rows := NewTestRows([][]string{
 		{`{"type": {"key": "/type/edition"}, "title": "Heroes Gone Rogue", "authors": [{"key": "/authors/OL9400519A"}], "publish_date": "May 25, 2019", "source_records": ["amazon:1097444031", "bwb:9781097444038"], "number_of_pages": 428, "publishers": ["Independently Published", "Independently published"], "isbn_10": ["1097444031"], "isbn_13": ["9781097444038"], "physical_format": "paperback", "notes": {"type": "/type/text", "value": "Source title: Heroes Gone Rogue (Mage for Hire)"}, "covers": [11856567], "works": [{"key": "/works/OL24940134W"}], "key": "/books/OL33151637M", "latest_revision": 2, "revision": 2, "created": {"type": "/type/datetime", "value": "2021-08-30T01:31:11.298001"}, "last_modified": {"type": "/type/datetime", "value": "2022-11-23T23:41:08.217765"}} `, `[{"type":{"key":"/type/author"},"name":"Jason Kenyon","key":"/authors/OL9400519A","source_records":["amazon:1097444031"],"latest_revision":1,"revision":1,"created":{"type":"/type/datetime","value":"2021-08-30T01:31:11.298001"},"last_modified":{"type":"/type/datetime","value":"2021-08-30T01:31:11.298001"}}]`},
 		{`{"type": {"key": "/type/edition"}, "authors": [{"key": "/authors/OL8173481A"}], "isbn_13": ["9781519158864"], "languages": [{"key": "/languages/eng"}], "number_of_pages": 468, "publish_date": "2015", "publishers": ["CreateSpace Independent Publishing Platform"], "source_records": ["bwb:9781519158864"], "title": "Heroes of Rogue Valley", "weight": "0.595", "works": [{"key": "/works/OL41431936W"}], "key": "/books/OL56269845M", "latest_revision": 1, "revision": 1, "created": {"type": "/type/datetime", "value": "2024-10-02T10:17:11.671289"}, "last_modified": {"type": "/type/datetime", "value": "2024-10-02T10:17:11.671289"}} `, `[{"name":"Ann Roth","created":{"type":"/type/datetime","value":"2020-08-17T14:00:26.715694"},"last_modified":{"type":"/type/datetime","value":"2020-08-17T14:00:26.715694"},"latest_revision":1,"key":"/authors/OL8173481A","type":{"key":"/type/author"},"revision":1}]`},
 		{`{"publishers": ["Bloomsbury Childrens an imprint of Bloomsbury Publishing PLC"], "identifiers": {}, "weight": "145 grams", "series": ["yes"], "physical_format": "paperback", "last_modified": {"type": "/type/datetime", "value": "2020-04-07T20:57:15.472517"}, "latest_revision": 2, "key": "/books/OL27935326M", "publish_places": ["england"], "pagination": "400p", "classifications": {}, "contributors": [{"role": "Illustrator", "name": "Erica Salcedo"}], "title": "Kid Normal and the Rogue Heroes", "number_of_pages": 400, "created": {"type": "/type/datetime", "value": "2020-04-07T20:39:56.884030"}, "publish_date": "2017", "copyright_date": "no", "works": [{"key": "/works/OL20189709W"}], "type": {"key": "/type/edition"}, "physical_dimensions": "19.8 x 12.9 x 3 centimeters", "revision": 2} `, `[]`},
@@ -27,19 +29,15 @@ func TestBookCreation(t *testing.T) {
 		{`{"subtitle": "the history of the SAS, Britain's secret special forces unit that sabotaged the Nazis and changed the nature of the war", "description": {"type": "/type/text", "value": "Britain's Special Air Service--or SAS--was the brainchild of David Stirling, a young, gadabout aristocrat with a remarkable strategic mind. Where his colleagues looked at a map of World War II's African theater and saw a protracted struggle with Rommel's desert forces, Stirling saw an opportunity: given a small number of elite, well-trained men, he could parachute behind Nazi lines and sabotage their airplanes and supplies. Paired with his constitutional opposite, the disciplined martinet Jock Lewes, Stirling assembled a revolutionary fighting force that would upend not just the balance of the war, but the nature of combat itself. He faced no little resistance from those who found his tactics ungentlemanly or beyond the pale, but in the SAS's remarkable exploits facing the Nazis in the Africa and then on the Continent can be found the seeds of nearly all special forces units that would follow. Bringing his keen eye for psychological detail to a riveting wartime narrative, Ben Macintyre uses his unprecedented access to SAS archives to shine a light inside a legendary unit long shrouded in secrecy. The result is not just a tremendous war story, but a fascinating group portrait of men of whom history and country asked the most.--Publisher description."}, "isbn_10": ["1524703397"], "subject_times": ["20th century"], "full_title": "Rogue heroes the history of the SAS, Britain's secret special forces unit that sabotaged the Nazis and changed the nature of the war", "lc_classifications": ["D760.S64 M33 2016b"], "key": "/books/OL27217545M", "authors": [{"key": "/authors/OL381435A"}], "table_of_contents": [{"level": 0, "title": "WAR IN THE DESERT", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "Cowboy Soldier", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "L Detachment", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "Recruits", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "Into the Desert", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "The Long Range Desert Group", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "Devil Country", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "A Party of Ghosts", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "Blitz Buggy", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "Benghazi Bed-And-Breakfast", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "Seven Airfields", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "Mass Sabotage At Sidi Haneish", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "Desert Doctors", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "Quite, Quite Mad", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "Alamein", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "WAR IN EUROPE", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "Italy", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "Bulbasket", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "Houndsworth", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "An Eye for an Eye", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "Paddy McGinty's for Risk", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "Battaglione Alleata", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "Into the Reich", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "Liberation", "type": {"key": "/type/toc_item"}}, {"level": 0, "title": "Who Dares Survives.", "type": {"key": "/type/toc_item"}}], "subjects": ["Special forces (Military science)", "Commando operations", "Great Britain", "World War, 1939-1945", "Great Britain. Army. Special Air Service", "Regimental histories", "History"], "edition_name": "First large print edition.", "pagination": "xxiv, 565 pages, 32 unnumbered pages of plates", "source_records": ["marc:marc_openlibraries_sanfranciscopubliclibrary/sfpl_chq_2018_12_24_run05.mrc:359911286:4386", "promise:bwb_daily_pallets_2020-04-30"], "title": "Rogue heroes", "dewey_decimal_class": ["940.54/1241"], "notes": {"type": "/type/text", "value": "Includes bibliographical references (pages 525-529) and index."}, "number_of_pages": 565, "isbn_13": ["9781524703394"], "languages": [{"key": "/languages/eng"}], "subject_places": ["Great Britain"], "local_id": ["urn:sfpl:31223119553841", "urn:sfpl:31223119553858", "urn:sfpl:31223119553916", "urn:bwbsku:O6-BWV-522"], "publish_date": "2016", "publish_country": "nyu", "by_statement": "Ben MacIntyre", "oclc_numbers": ["968032955", "936347322"], "works": [{"key": "/works/OL20036147W"}], "type": {"key": "/type/edition"}, "latest_revision": 3, "revision": 3, "created": {"type": "/type/datetime", "value": "2019-07-19T16:39:44.127446"}, "last_modified": {"type": "/type/datetime", "value": "2023-08-21T15:29:57.539585"}} `, `[{"photos":[7437600],"personal_name":"Ben Macintyre","bio":"Benedict Richard Pierce Macintyre is a British author, historian, reviewer and columnist writing for The Times newspaper. His columns range from current affairs to historical controversies. - Wikipedia","name":"Ben Macintyre","remote_ids":{"isni":"0000000114423045","viaf":"39453414","wikidata":"Q2895507"},"key":"/authors/OL381435A","alternate_names":["Ben MacIntyre","Benedict Richard Pierce Macintyre"],"birth_date":"25 December 1963","type":{"key":"/type/author"},"source_records":["amazon:2283024714","amazon:024137572X","bwb:9780593728093"],"latest_revision":10,"revision":10,"created":{"type":"/type/datetime","value":"2008-04-01T03:28:50.625462"},"last_modified":{"type":"/type/datetime","value":"2024-08-27T17:00:34.763297"}}]`},
 		{`{"type": {"key": "/type/edition"}, "title": "Rogue Heroes : The History of the SAS, Britain's Secret Special Forces Unit That Sabotaged the Nazis and Changed the Nature of War", "authors": [{"key": "/authors/OL381435A"}], "source_records": ["amazon:1509425780"], "publishers": ["Random House"], "isbn_10": ["1509425780"], "isbn_13": ["9781509425785"], "physical_format": "preloaded digital audio player", "full_title": "Rogue Heroes : The History of the SAS, Britain's Secret Special Forces Unit That Sabotaged the Nazis and Changed the Nature of War : Library Edition", "subtitle": "Library Edition", "notes": {"type": "/type/text", "value": "Source title: Rogue Heroes: The History of the SAS, Britain's Secret Special Forces Unit That Sabotaged the Nazis and Changed the Nature of War: Library Edition"}, "works": [{"key": "/works/OL20036147W"}], "key": "/books/OL41639456M", "latest_revision": 3, "revision": 3, "created": {"type": "/type/datetime", "value": "2022-11-27T00:37:40.504858"}, "last_modified": {"type": "/type/datetime", "value": "2023-08-21T15:29:57.539585"}} `, `[{"photos":[7437600],"personal_name":"Ben Macintyre","bio":"Benedict Richard Pierce Macintyre is a British author, historian, reviewer and columnist writing for The Times newspaper. His columns range from current affairs to historical controversies. - Wikipedia","name":"Ben Macintyre","remote_ids":{"isni":"0000000114423045","viaf":"39453414","wikidata":"Q2895507"},"key":"/authors/OL381435A","alternate_names":["Ben MacIntyre","Benedict Richard Pierce Macintyre"],"birth_date":"25 December 1963","type":{"key":"/type/author"},"source_records":["amazon:2283024714","amazon:024137572X","bwb:9780593728093"],"latest_revision":10,"revision":10,"created":{"type":"/type/datetime","value":"2008-04-01T03:28:50.625462"},"last_modified":{"type":"/type/datetime","value":"2024-08-27T17:00:34.763297"}}]`},
 		{`{"type": {"key": "/type/edition"}, "authors": [{"key": "/authors/OL9102926A"}], "isbn_13": ["9781504044950"], "languages": [{"key": "/languages/eng"}], "pagination": "30", "publish_date": "2017", "publishers": ["Worth Books"], "source_records": ["bwb:9781504044950"], "title": "Summary and Analysis of Rogue Heroes : the History of the SAS, Britain's Secret Special Forces Unit That Sabotaged the Nazis and Changed the Nature of War", "subtitle": "Based on the Book by Ben Macintyre", "works": [{"key": "/works/OL36454518W"}], "key": "/books/OL49261876M", "latest_revision": 1, "revision": 1, "created": {"type": "/type/datetime", "value": "2023-08-17T03:20:24.712722"}, "last_modified": {"type": "/type/datetime", "value": "2023-08-17T03:20:24.712722"}} `, `[{"type":{"key":"/type/author"},"name":"Worth Books","key":"/authors/OL9102926A","source_records":["amazon:150404665X"],"latest_revision":1,"revision":1,"created":{"type":"/type/datetime","value":"2021-02-09T05:46:29.689814"},"last_modified":{"type":"/type/datetime","value":"2021-02-09T05:46:29.689814"}}]`},
-	}
+	})
 
-	books, err := buildResults(t.Context(), asSequence(rows))
+	books, err := asBooks(rows)
 	require.NoError(t, err)
 
-	require.Equal(t, 8, len(books))
+	require.Equal(t, 17, len(books))
 
-	require.Equal(t, 0, books[0].rank)
-	require.Equal(t, 1, books[1].rank)
-
-	require.Equal(t, "/books/OL27935326M", books[2].openLibraryKey)
-	require.Len(t, books[2].OtherEditions, 1)
-	require.Equal(t, "/books/OL27375397M", books[2].OtherEditions[0].openLibraryKey)
+	require.Equal(t, "/books/OL27935326M", books[2].SourceId)
+	require.Equal(t, "/authors/OL9102926A", books[16].Authors[0].SourceId)
 }
 
 func asSequence(rows [][]string) iter.Seq[bookResult] {
@@ -50,4 +48,39 @@ func asSequence(rows [][]string) iter.Seq[bookResult] {
 			}
 		}
 	}
+}
+
+func NewTestRows(rows [][]string) scannable {
+	return &testRows{
+		rows:    rows,
+		current: -1,
+	}
+}
+
+type testRows struct {
+	rows    [][]string
+	current int
+}
+
+func (t *testRows) Next() bool {
+	t.current++
+	return t.current < len(t.rows)
+}
+
+func (t *testRows) Scan(dest ...any) error {
+	if t.current < 0 {
+		return errors.New("you must call Next() before Scan()")
+	}
+
+	row := t.rows[t.current]
+	for i, target := range dest {
+		switch d := target.(type) {
+		case *string:
+			*d = row[i]
+		default:
+			return fmt.Errorf("%T is not supported", target)
+		}
+	}
+
+	return nil
 }
