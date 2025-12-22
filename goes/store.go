@@ -2,12 +2,19 @@ package goes
 
 import (
 	"context"
+	"iter"
 	"kirjasto/tracing"
 
+	"github.com/google/uuid"
 	"go.opentelemetry.io/otel/attribute"
 )
 
-func Load(ctx context.Context, store *SqliteStore /* change to something more generic later*/, state *AggregateState) error {
+type Store interface {
+	Save(ctx context.Context, aggregateID uuid.UUID, sequence int, events []EventDescriptor) error
+	Load(ctx context.Context, aggregateID uuid.UUID) iter.Seq2[EventDescriptor, error]
+}
+
+func Load(ctx context.Context, store Store, state *AggregateState) error {
 	ctx, span := tr.Start(ctx, "load")
 	defer span.End()
 
@@ -32,7 +39,7 @@ func Load(ctx context.Context, store *SqliteStore /* change to something more ge
 	return nil
 }
 
-func Save(ctx context.Context, store *SqliteStore, state *AggregateState) error {
+func Save(ctx context.Context, store Store, state *AggregateState) error {
 
 	pending := len(state.pendingEvents)
 	if pending == 0 {

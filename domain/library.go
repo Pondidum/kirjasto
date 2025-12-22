@@ -55,7 +55,7 @@ func LoadLibrary(ctx context.Context, eventStore *goes.SqliteStore, id uuid.UUID
 	return library, nil
 }
 
-func SaveLibrary(ctx context.Context, eventStore *goes.SqliteStore, library *Library) error {
+func SaveLibrary(ctx context.Context, eventStore goes.Store, library *Library) error {
 	return goes.Save(ctx, eventStore, library.state)
 }
 
