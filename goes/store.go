@@ -26,7 +26,7 @@ func Load(ctx context.Context, store Store, state *AggregateState) error {
 
 		count++
 
-		if err := state.ReplayEvent(event); err != nil {
+		if err := state.replayEvent(event); err != nil {
 			return err
 		}
 	}

@@ -113,7 +113,7 @@ func (e *EventDescriptor) Marshal() ([]byte, error) {
 	return e.marshalled, nil
 }
 
-func (a *AggregateState) ReplayEvent(event EventDescriptor) error {
+func (a *AggregateState) replayEvent(event EventDescriptor) error {
 	handler, found := a.handlers[event.EventType]
 	if !found {
 		return fmt.Errorf("no handler registered for %s", event.EventType)
