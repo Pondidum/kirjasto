@@ -33,7 +33,7 @@ func libraryAction(ctx context.Context, config *config.Config, action func(libra
 		return tracing.Error(span, err)
 	}
 
-	if err := domain.SaveLibrary(ctx, store, library); err != nil {
+	if err := goes.Save(ctx, store, library); err != nil {
 		return tracing.Error(span, err)
 	}
 

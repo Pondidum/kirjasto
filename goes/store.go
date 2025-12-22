@@ -19,7 +19,7 @@ func Load(ctx context.Context, store Store, state *AggregateState) error {
 	defer span.End()
 
 	count := 0
-	for event, err := range store.Load(ctx, state.ID()) {
+	for event, err := range store.Load(ctx, state.id) {
 		if err != nil {
 			return tracing.Error(span, err)
 		}
@@ -39,14 +39,18 @@ func Load(ctx context.Context, store Store, state *AggregateState) error {
 	return nil
 }
 
-func Save(ctx context.Context, store Store, state *AggregateState) error {
+type Aggregate interface {
+	state() *AggregateState
+}
 
+func Save(ctx context.Context, store Store, aggregate Aggregate) error {
+	state := aggregate.state()
 	pending := len(state.pendingEvents)
 	if pending == 0 {
 		return nil
 	}
 
-	if err := store.Save(ctx, state.ID(), Sequence(state), state.pendingEvents); err != nil {
+	if err := store.Save(ctx, state.id, Sequence(state), state.pendingEvents); err != nil {
 		return err
 	}
 

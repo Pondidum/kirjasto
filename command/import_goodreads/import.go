@@ -86,7 +86,7 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		return tracing.Error(span, err)
 	}
 
-	if err := domain.SaveLibrary(ctx, eventStore, library); err != nil {
+	if err := goes.Save(ctx, eventStore, library); err != nil {
 		return tracing.Error(span, err)
 	}
 

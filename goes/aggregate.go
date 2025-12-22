@@ -9,6 +9,13 @@ import (
 	"github.com/google/uuid"
 )
 
+func NewAggregateState() *AggregateState {
+	return &AggregateState{
+		sequence: -1,
+		handlers: map[string]func(event any) error{},
+	}
+}
+
 type AggregateState struct {
 	id       uuid.UUID
 	sequence int
@@ -18,15 +25,8 @@ type AggregateState struct {
 	pendingEvents []EventDescriptor
 }
 
-func NewAggregateState() *AggregateState {
-	return &AggregateState{
-		sequence: -1,
-		handlers: map[string]func(event any) error{},
-	}
-}
-
-func (a *AggregateState) ID() uuid.UUID {
-	return a.id
+func (as *AggregateState) state() *AggregateState {
+	return as
 }
 
 func Register[TEvent any](state *AggregateState, handler func(event TEvent)) {

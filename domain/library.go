@@ -17,15 +17,15 @@ var LibraryID uuid.UUID = uuid.MustParse("89ea74d8-1960-41cc-b795-2d843f02c0aa")
 
 func blankLibrary() *Library {
 	library := &Library{
-		state: goes.NewAggregateState(),
+		AggregateState: goes.NewAggregateState(),
 	}
 
-	goes.Register(library.state, library.onLibraryCreated)
-	goes.Register(library.state, library.onBookImported)
-	goes.Register(library.state, library.onBookAdded)
-	goes.Register(library.state, library.onBookStarted)
-	goes.Register(library.state, library.onBookFinished)
-	goes.Register(library.state, library.onBookInfoAdded)
+	goes.Register(library.AggregateState, library.onLibraryCreated)
+	goes.Register(library.AggregateState, library.onBookImported)
+	goes.Register(library.AggregateState, library.onBookAdded)
+	goes.Register(library.AggregateState, library.onBookStarted)
+	goes.Register(library.AggregateState, library.onBookFinished)
+	goes.Register(library.AggregateState, library.onBookInfoAdded)
 
 	return library
 }
@@ -33,7 +33,7 @@ func blankLibrary() *Library {
 func NewLibrary(id uuid.UUID) *Library {
 	library := blankLibrary()
 
-	goes.Apply(library.state, LibraryCreated{
+	goes.Apply(library.AggregateState, LibraryCreated{
 		ID: id,
 	})
 
@@ -45,28 +45,24 @@ func LoadLibrary(ctx context.Context, eventStore *goes.SqliteStore, id uuid.UUID
 	defer span.End()
 
 	library := blankLibrary()
-	goes.SetID(library.state, id)
+	goes.SetID(library.AggregateState, id)
 
-	if err := goes.Load(ctx, eventStore, library.state); err != nil {
+	if err := goes.Load(ctx, eventStore, library.AggregateState); err != nil {
 		return nil, tracing.Error(span, err)
 	}
 
 	return library, nil
 }
 
-func SaveLibrary(ctx context.Context, eventStore goes.Store, library *Library) error {
-	return goes.Save(ctx, eventStore, library.state)
-}
-
 type Library struct {
-	state *goes.AggregateState
+	*goes.AggregateState
 
 	Books      []*LibraryBook
 	nextBookId int
 }
 
 func (l *Library) onLibraryCreated(e LibraryCreated) {
-	goes.SetID(l.state, e.ID)
+	goes.SetID(l.AggregateState, e.ID)
 }
 
 type ImportData struct {
@@ -85,7 +81,7 @@ func (l *Library) ImportBook(info BookInfo, importData ImportData) (int, error) 
 		ImportData: importData,
 	}
 
-	return bookImport.BookId, goes.Apply(l.state, bookImport)
+	return bookImport.BookId, goes.Apply(l.AggregateState, bookImport)
 }
 
 func (l *Library) onBookImported(e BookImported) {
@@ -111,7 +107,7 @@ func (l *Library) AddBook(book BookInfo, tags []string) (int, error) {
 		DateAdded: time.Now(),
 	}
 
-	return added.BookId, goes.Apply(l.state, added)
+	return added.BookId, goes.Apply(l.AggregateState, added)
 }
 
 func (l *Library) onBookAdded(e BookAdded) {
@@ -140,7 +136,7 @@ func (l *Library) AddBookInfo(bookId int, info BookInfo) error {
 		return fmt.Errorf("no book found for id '%v'", bookId)
 	}
 
-	return goes.Apply(l.state, BookInfoAdded{BookId: bookId, Info: info})
+	return goes.Apply(l.AggregateState, BookInfoAdded{BookId: bookId, Info: info})
 }
 
 func (l *Library) onBookInfoAdded(e BookInfoAdded) {
@@ -157,7 +153,7 @@ func (l *Library) StartReading(isbn string, when time.Time) error {
 		when = time.Now()
 	}
 
-	return goes.Apply(l.state, BookStarted{
+	return goes.Apply(l.AggregateState, BookStarted{
 		Isbn: isbn,
 		When: when,
 	})
@@ -172,7 +168,7 @@ func (l *Library) FinishReading(isbn string, when time.Time) error {
 		when = time.Now()
 	}
 
-	return goes.Apply(l.state, BookFinished{
+	return goes.Apply(l.AggregateState, BookFinished{
 		Isbn: isbn,
 		When: when,
 	})
