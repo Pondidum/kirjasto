@@ -10,7 +10,7 @@ import (
 )
 
 type Store interface {
-	Save(ctx context.Context, aggregateID uuid.UUID, sequence int, events []EventDescriptor) error
+	Save(ctx context.Context, aggregate Aggregate) error
 	Load(ctx context.Context, aggregateID uuid.UUID) iter.Seq2[EventDescriptor, error]
 }
 
@@ -50,7 +50,7 @@ func Save(ctx context.Context, store Store, aggregate Aggregate) error {
 		return nil
 	}
 
-	if err := store.Save(ctx, state.id, Sequence(state), state.pendingEvents); err != nil {
+	if err := store.Save(ctx, aggregate); err != nil {
 		return err
 	}
 

@@ -18,16 +18,17 @@ type MemoryStore struct {
 	Aggregates map[uuid.UUID][]EventDescriptor
 }
 
-func (s *MemoryStore) Save(ctx context.Context, aggregateID uuid.UUID, sequence int, events []EventDescriptor) error {
-	storedEvents, found := s.Aggregates[aggregateID]
+func (s *MemoryStore) Save(ctx context.Context, aggregate Aggregate) error {
+	state := aggregate.state()
+	storedEvents, found := s.Aggregates[state.id]
 	if found {
 		dbSequence := storedEvents[len(storedEvents)-1].Sequence
-		if dbSequence > sequence {
-			return fmt.Errorf("aggregate has new events in the database. db: %v, memory: %v", dbSequence, sequence)
+		if dbSequence > state.sequence {
+			return fmt.Errorf("aggregate has new events in the database. db: %v, memory: %v", dbSequence, state.sequence)
 		}
 	}
 
-	s.Aggregates[aggregateID] = append(storedEvents, events...)
+	s.Aggregates[state.id] = append(storedEvents, state.pendingEvents...)
 	return nil
 }
 

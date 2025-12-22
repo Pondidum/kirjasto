@@ -39,7 +39,7 @@ func TestAddingBooks(t *testing.T) {
 	require.Equal(t, 1, id2)
 
 	store := goes.NewMemoryStore()
-	err = SaveLibrary(t.Context(), store, l)
+	err = store.Save(t.Context(), l)
 	require.NoError(t, err)
 
 	events := store.Aggregates[LibraryID]

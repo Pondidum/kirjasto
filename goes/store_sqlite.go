@@ -62,7 +62,7 @@ func (s *SqliteStore) RegisterProjection(name string, projection Projection) err
 	return s.projections.RegisterProjection(name, projection)
 }
 
-func (s *SqliteStore) Save(ctx context.Context, aggregateID uuid.UUID, sequence int, events []EventDescriptor) error {
+func (s *SqliteStore) Save(ctx context.Context, aggregate Aggregate) error {
 	ctx, span := tr.Start(ctx, "save")
 	defer span.End()
 
@@ -72,7 +72,9 @@ func (s *SqliteStore) Save(ctx context.Context, aggregateID uuid.UUID, sequence 
 	}
 	defer tx.Rollback()
 
-	if err := validateSequence(ctx, tx, aggregateID, sequence); err != nil {
+	state := aggregate.state()
+
+	if err := validateSequence(ctx, tx, state.id, state.sequence); err != nil {
 		return tracing.Error(span, err)
 	}
 
@@ -85,7 +87,7 @@ func (s *SqliteStore) Save(ctx context.Context, aggregateID uuid.UUID, sequence 
 		return tracing.Error(span, err)
 	}
 
-	for _, event := range events {
+	for _, event := range state.pendingEvents {
 		if err := writer.Write(ctx, event); err != nil {
 			return err
 		}
