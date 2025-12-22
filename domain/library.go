@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"kirjasto/goes"
-	"kirjasto/openlibrary"
 	"kirjasto/tracing"
 	"time"
 
@@ -62,7 +61,7 @@ func SaveLibrary(ctx context.Context, eventStore goes.Store, library *Library) e
 type Library struct {
 	state *goes.AggregateState
 
-	Books      []LibraryBook
+	Books      []*LibraryBook
 	nextBookId int
 }
 
@@ -71,36 +70,19 @@ func (l *Library) onLibraryCreated(e LibraryCreated) {
 }
 
 type ImportData struct {
-	Isbns       []string
-	Title       string
-	Author      string
-	PublishYear int
-
-	Rating    int
+	Added     time.Time
+	Read      time.Time
 	ReadCount int
-	Shelves   []string
-
-	DateAdded time.Time
-	DateRead  time.Time
+	Tags      []string
+	Extra     map[string]any
 }
 
-func (l *Library) ImportBook(info ImportData) (int, error) {
+func (l *Library) ImportBook(info BookInfo, importData ImportData) (int, error) {
 
 	bookImport := BookImported{
-		BookId: l.nextBookId,
-		Book: Book{
-			Isbns:       info.Isbns,
-			Title:       info.Title,
-			Authors:     []string{info.Author},
-			PublishYear: info.PublishYear,
-		},
-
-		Rating:    info.Rating,
-		ReadCount: info.ReadCount,
-		Tags:      info.Shelves,
-
-		DateAdded: info.DateAdded,
-		DateRead:  info.DateRead,
+		BookId:     l.nextBookId,
+		Book:       info,
+		ImportData: importData,
 	}
 
 	return bookImport.BookId, goes.Apply(l.state, bookImport)
@@ -108,20 +90,20 @@ func (l *Library) ImportBook(info ImportData) (int, error) {
 
 func (l *Library) onBookImported(e BookImported) {
 	l.nextBookId++
-	lb := LibraryBook{
-		ID:    e.BookId,
-		Book:  e.Book,
-		Added: e.DateAdded,
-		Tags:  e.Tags,
+	lb := &LibraryBook{
+		ID:       e.BookId,
+		BookInfo: e.Book,
+		Added:    e.ImportData.Added,
+		Tags:     e.ImportData.Tags,
 	}
-	if !e.DateRead.IsZero() {
+	if !e.ImportData.Read.IsZero() || e.ImportData.ReadCount > 0 {
 		lb.State = "read"
 	}
 
 	l.Books = append(l.Books, lb)
 }
 
-func (l *Library) AddBook(book Book, tags []string) (int, error) {
+func (l *Library) AddBook(book BookInfo, tags []string) (int, error) {
 	added := BookAdded{
 		BookId:    l.nextBookId,
 		Book:      book,
@@ -134,17 +116,17 @@ func (l *Library) AddBook(book Book, tags []string) (int, error) {
 
 func (l *Library) onBookAdded(e BookAdded) {
 	l.nextBookId++
-	lb := LibraryBook{
-		ID:    e.BookId,
-		Book:  e.Book,
-		Added: e.DateAdded,
-		Tags:  e.Tags,
+	lb := &LibraryBook{
+		ID:       e.BookId,
+		BookInfo: e.Book,
+		Added:    e.DateAdded,
+		Tags:     e.Tags,
 	}
 
 	l.Books = append(l.Books, lb)
 }
 
-func (l *Library) AddBookInfo(bookId int, info openlibrary.Book) error {
+func (l *Library) AddBookInfo(bookId int, info BookInfo) error {
 
 	found := false
 	for _, lb := range l.Books {
@@ -164,7 +146,7 @@ func (l *Library) AddBookInfo(bookId int, info openlibrary.Book) error {
 func (l *Library) onBookInfoAdded(e BookInfoAdded) {
 	for _, book := range l.Books {
 		if book.ID == e.BookId {
-			book.Apply(e.Info)
+			book.BookInfo = e.Info
 			return
 		}
 	}

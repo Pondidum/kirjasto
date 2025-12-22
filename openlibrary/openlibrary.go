@@ -3,6 +3,7 @@ package openlibrary
 import (
 	"context"
 	"database/sql"
+	"kirjasto/domain"
 	"kirjasto/storage"
 	"kirjasto/tracing"
 	"slices"
@@ -28,7 +29,7 @@ func NewClient(ctx context.Context, dbPath string) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) FindBooksByIsbn(ctx context.Context, isbn string) ([]*Book, error) {
+func (c *Client) FindBooksByIsbn(ctx context.Context, isbn string) ([]*domain.BookInfo, error) {
 	ctx, span := tr.Start(ctx, "find_book_by_isbn")
 	defer span.End()
 
@@ -56,7 +57,7 @@ func (c *Client) FindBooksByIsbn(ctx context.Context, isbn string) ([]*Book, err
 	return asBooks(rows)
 }
 
-func (c *Client) FindBooksByTitle(ctx context.Context, search string) ([]*Book, error) {
+func (c *Client) FindBooksByTitle(ctx context.Context, search string) ([]*domain.BookInfo, error) {
 	ctx, span := tr.Start(ctx, "find_book_by_title")
 	defer span.End()
 
@@ -84,7 +85,7 @@ func (c *Client) FindBooksByTitle(ctx context.Context, search string) ([]*Book, 
 	return asBooks(rows)
 }
 
-func (c *Client) FindBook(ctx context.Context, title string, isbns []string) (*Book, error) {
+func (c *Client) FindBook(ctx context.Context, title string, isbns []string) (*domain.BookInfo, error) {
 	ctx, span := tr.Start(ctx, "find_book")
 	defer span.End()
 
@@ -116,7 +117,7 @@ func (c *Client) FindBook(ctx context.Context, title string, isbns []string) (*B
 	return nil, nil
 }
 
-func (c *Client) FindBooks(ctx context.Context, title string, isbns []string) ([]*Book, error) {
+func (c *Client) FindBooks(ctx context.Context, title string, isbns []string) ([]*domain.BookInfo, error) {
 	ctx, span := tr.Start(ctx, "find_book")
 	defer span.End()
 
@@ -125,7 +126,7 @@ func (c *Client) FindBooks(ctx context.Context, title string, isbns []string) ([
 		return len(b) - len(a)
 	})
 
-	allResults := []*Book{}
+	allResults := []*domain.BookInfo{}
 	for _, isbn := range isbns {
 		books, err := c.FindBooksByIsbn(ctx, isbn)
 		if err != nil {

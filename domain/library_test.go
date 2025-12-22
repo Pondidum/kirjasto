@@ -1,10 +1,12 @@
 package domain
 
 import (
+	"kirjasto/goes"
 	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestIsbnSorting(t *testing.T) {
@@ -26,7 +28,20 @@ func TestIsbnSorting(t *testing.T) {
 }
 
 func TestAddingBooks(t *testing.T) {
-	l := blankLibrary()
+	l := NewLibrary(LibraryID)
 
-	l.AddBook()
+	id1, err := l.ImportBook(BookInfo{}, ImportData{})
+	require.NoError(t, err)
+	require.Equal(t, 0, id1)
+
+	id2, err := l.ImportBook(BookInfo{}, ImportData{})
+	require.NoError(t, err)
+	require.Equal(t, 1, id2)
+
+	store := goes.NewMemoryStore()
+	err = SaveLibrary(t.Context(), store, l)
+	require.NoError(t, err)
+
+	events := store.Aggregates[LibraryID]
+	require.Len(t, events, 3)
 }

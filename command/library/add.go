@@ -6,6 +6,7 @@ import (
 	"kirjasto/domain"
 	"kirjasto/openlibrary"
 	"kirjasto/tracing"
+	"time"
 
 	"github.com/spf13/pflag"
 	"go.opentelemetry.io/otel"
@@ -15,13 +16,16 @@ var tr = otel.Tracer("command.library")
 
 func NewAddCommand() *AddCommand {
 	return &AddCommand{
-		book: domain.Book{},
+		book: domain.BookInfo{},
 	}
 }
 
 type AddCommand struct {
-	book domain.Book
-	tags []string
+	book domain.BookInfo
+
+	authors     []string
+	publishYear int
+	tags        []string
 }
 
 func (c *AddCommand) Name() string {
@@ -36,8 +40,8 @@ func (c *AddCommand) Flags() *pflag.FlagSet {
 	flags := pflag.NewFlagSet("add", pflag.ContinueOnError)
 	flags.StringSliceVar(&c.book.Isbns, "isbn", []string{}, "the book's isbn(s)")
 	flags.StringVar(&c.book.Title, "title", "", "the book's title")
-	flags.StringSliceVar(&c.book.Authors, "author", []string{}, "the book's authors")
-	flags.IntVar(&c.book.PublishYear, "publish-year", 0, "the year the book was published")
+	flags.StringSliceVar(&c.authors, "author", []string{}, "the book's authors")
+	flags.IntVar(&c.publishYear, "publish-year", 0, "the year the book was published")
 	flags.StringSliceVar(&c.tags, "tags", []string{}, "tags to add to the book")
 	return flags
 }
@@ -49,6 +53,19 @@ func (c *AddCommand) Execute(ctx context.Context, config *config.Config, args []
 	if len(c.book.Isbns) == 0 && c.book.Title == "" {
 		return tracing.Errorf(span, "The books must have at least one of: isbn, title")
 	}
+
+	c.book.PublishDate = time.Date(c.publishYear, 0, 0, 0, 0, 0, 0, time.Now().Location())
+	c.book.Authors = make([]domain.Author, len(c.authors))
+	for i, author := range c.authors {
+		c.book.Authors[i] = domain.Author{
+			Source:   "manual",
+			SourceId: author,
+			Name:     author,
+		}
+	}
+
+	c.book.Source = "manual"
+	c.book.SourceId = "none"
 
 	openlib, err := openlibrary.NewClient(ctx, config.OpenLibraryDb)
 	if err != nil {

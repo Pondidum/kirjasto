@@ -1,29 +1,28 @@
 package openlibrary
 
-import "encoding/json"
-
-type Author struct {
-	ID   string
-	Name string
-}
+import (
+	"encoding/json"
+	"kirjasto/domain"
+)
 
 type authorDto struct {
 	Key  string
 	Name string
 }
 
-func authorsFromJson(authorJson string) ([]Author, error) {
+func authorsFromJson(authorJson string) ([]domain.Author, error) {
 
 	dto := []authorDto{}
 	if err := json.Unmarshal([]byte(authorJson), &dto); err != nil {
 		return nil, err
 	}
 
-	authors := make([]Author, len(dto))
+	authors := make([]domain.Author, len(dto))
 	for i, src := range dto {
-		authors[i] = Author{
-			ID:   src.Key,
-			Name: src.Name,
+		authors[i] = domain.Author{
+			Name:     src.Name,
+			Source:   "openlibrary",
+			SourceId: src.Key,
 		}
 	}
 	return authors, nil

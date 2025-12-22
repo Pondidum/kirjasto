@@ -1,7 +1,6 @@
 package domain
 
 import (
-	"kirjasto/openlibrary"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,27 +11,21 @@ type LibraryCreated struct {
 }
 
 type BookImported struct {
-	Book Book
-
-	BookId    int
-	Tags      []string
-	Rating    int
-	ReadCount int
-
-	DateAdded time.Time
-	DateRead  time.Time
+	BookId     int
+	Book       BookInfo
+	ImportData ImportData
 }
 
 type BookAdded struct {
-	Book      Book
 	BookId    int
+	Book      BookInfo
 	Tags      []string
 	DateAdded time.Time
 }
 
 type BookInfoAdded struct {
 	BookId int
-	Info   openlibrary.Book
+	Info   BookInfo
 }
 
 type BookStarted struct {

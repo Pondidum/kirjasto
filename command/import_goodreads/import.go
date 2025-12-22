@@ -175,10 +175,10 @@ func processFile(ctx context.Context, openlib *openlibrary.Client, library *doma
 		}
 		lines++
 
-		book := asBookImport(span, reviews, line)
-		fmt.Printf("%s, %s...", book.Title, book.Author)
+		book, importInfo := asBookImport(span, reviews, line)
+		fmt.Printf("%s...", book.Title)
 
-		bookId, err := library.ImportBook(book)
+		bookId, err := library.ImportBook(book, importInfo)
 		if err != nil {
 			return tracing.Error(span, err)
 		}
@@ -205,7 +205,7 @@ func processFile(ctx context.Context, openlib *openlibrary.Client, library *doma
 	return nil
 }
 
-func asBookImport(span trace.Span, reviews map[string]reviewEntry, line []string) domain.ImportData {
+func asBookImport(span trace.Span, reviews map[string]reviewEntry, line []string) (domain.BookInfo, domain.ImportData) {
 	isbns := make([]string, 0, 2)
 	if isbn := line[fieldISBN13]; isbn != "" && isbn != `=""` {
 		isbns = append(isbns, strings.TrimSuffix(strings.TrimPrefix(isbn, `="`), `"`))
@@ -271,31 +271,43 @@ func asBookImport(span trace.Span, reviews map[string]reviewEntry, line []string
 		}
 	}
 
-	publishYear := 0
+	publishDate := time.Time{}
 	if val := line[fieldYearPublished]; val != "" {
 		parsed, err := strconv.Atoi(val)
 		if err != nil {
 			span.RecordError(fmt.Errorf("couldn't parse YearPublished: %w", err))
 		} else {
-			publishYear = parsed
+			publishDate = time.Date(parsed, 0, 0, 0, 0, 0, 0, time.Now().Location())
 		}
 	}
 
 	title := line[fieldTitle]
-	author := line[fieldAuthor]
+	author := domain.Author{
+		Source:   "goodreads",
+		SourceId: line[fieldAuthor],
+		Name:     line[fieldAuthor],
+	}
 
-	return domain.ImportData{
+	book := domain.BookInfo{
 		Isbns:       isbns,
 		Title:       title,
-		Author:      author,
-		PublishYear: publishYear,
-
-		Rating:    rating,
-		ReadCount: readCount,
-		Shelves:   shelves,
-		DateAdded: dateAdded,
-		DateRead:  dateRead,
+		Authors:     []domain.Author{author},
+		PublishDate: publishDate,
+		Source:      "goodreads",
+		SourceId:    fmt.Sprint(line[fieldBookId]),
 	}
+
+	info := domain.ImportData{
+		Added:     dateAdded,
+		Read:      dateRead,
+		ReadCount: readCount,
+		Tags:      shelves,
+		Extra: map[string]any{
+			"Rating": rating,
+		},
+	}
+
+	return book, info
 
 }
 

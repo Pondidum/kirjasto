@@ -4,23 +4,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"kirjasto/domain"
 	"time"
 )
-
-type Book struct {
-	Isbns []string
-
-	Title    string
-	Subtitle string
-	Authors  []Author
-	Covers   []int // ??
-
-	PublishDate *time.Time
-
-	OtherEditions  []*Book
-	rank           int
-	openLibraryKey string
-}
 
 type bookResult struct {
 	rank        int
@@ -29,8 +15,8 @@ type bookResult struct {
 	err         error
 }
 
-func asBooks(rows *sql.Rows) ([]*Book, error) {
-	books := []*Book{}
+func asBooks(rows *sql.Rows) ([]*domain.BookInfo, error) {
+	books := []*domain.BookInfo{}
 
 	rank := -1
 
@@ -55,7 +41,7 @@ func asBooks(rows *sql.Rows) ([]*Book, error) {
 	return books, nil
 }
 
-func asBook(rank int, editionJson string, authorJson string) (*Book, error) {
+func asBook(rank int, editionJson string, authorJson string) (*domain.BookInfo, error) {
 
 	authors, err := authorsFromJson(authorJson)
 	if err != nil {
@@ -67,18 +53,17 @@ func asBook(rank int, editionJson string, authorJson string) (*Book, error) {
 		return nil, err
 	}
 
-	book := &Book{
-		Title:          editionDto.Title,
-		Subtitle:       editionDto.Subtitle,
-		Isbns:          append(editionDto.Isbn13, editionDto.Isbn10...),
-		Authors:        authors,
-		Covers:         editionDto.Covers,
-		rank:           rank,
-		openLibraryKey: editionDto.Key,
+	book := &domain.BookInfo{
+		Title:    editionDto.Title,
+		Subtitle: editionDto.Subtitle,
+		Isbns:    append(editionDto.Isbn13, editionDto.Isbn10...),
+		Authors:  authors,
+		Source:   "openlibrary",
+		SourceId: editionDto.Key,
 	}
 
 	if publishDate, err := parsePublishDate(editionDto.PublishDate); err == nil {
-		book.PublishDate = &publishDate
+		book.PublishDate = publishDate
 	}
 
 	return book, nil
