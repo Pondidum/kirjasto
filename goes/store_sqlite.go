@@ -3,6 +3,7 @@ package goes
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"iter"
@@ -82,17 +83,26 @@ func (s *SqliteStore) Save(ctx context.Context, aggregate Aggregate) error {
 		return tracing.Error(span, err)
 	}
 
-	writer, err := newEventWriter(ctx, tx)
+	insertEvent, err := tx.PrepareContext(ctx, `
+		insert into events (aggregate_id, sequence, timestamp, event_type, event_data)
+		values (?, ?, ?, ?, ?)`,
+	)
 	if err != nil {
 		return tracing.Error(span, err)
 	}
 
-	for _, event := range state.pendingEvents {
-		if err := writer.Write(ctx, event); err != nil {
+	for _, e := range state.pendingEvents {
+		eventJson, err := e.Marshal()
+		if err != nil {
+			return tracing.Error(span, err)
+		}
+
+		_, err = insertEvent.ExecContext(ctx, e.AggregateID, e.Sequence, e.Timestamp, e.EventType, eventJson)
+		if err != nil {
 			return err
 		}
-		if err := s.projections.Project(ctx, tx, event); err != nil {
-			return tracing.Error(span, err)
+		if err := s.projections.Project(ctx, tx, e); err != nil {
+			return err
 		}
 	}
 
