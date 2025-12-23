@@ -15,7 +15,7 @@ var tr = otel.Tracer("domain")
 
 var LibraryID uuid.UUID = uuid.MustParse("89ea74d8-1960-41cc-b795-2d843f02c0aa")
 
-func blankLibrary() *Library {
+func NewLibrary() *Library {
 	library := &Library{
 		AggregateState: goes.NewAggregateState(),
 	}
@@ -31,9 +31,9 @@ func blankLibrary() *Library {
 }
 
 func CreateLibrary(id uuid.UUID) *Library {
-	library := blankLibrary()
+	library := NewLibrary()
 
-	goes.Apply(library.AggregateState, LibraryCreated{
+	goes.Apply(library, LibraryCreated{
 		ID: id,
 	})
 
@@ -44,7 +44,7 @@ func LoadLibrary(ctx context.Context, eventStore *goes.SqliteStore, id uuid.UUID
 	ctx, span := tr.Start(ctx, "load_library")
 	defer span.End()
 
-	library := blankLibrary()
+	library := NewLibrary()
 	goes.SetID(library.AggregateState, id)
 
 	if err := goes.Load(ctx, eventStore, library.AggregateState); err != nil {
@@ -81,7 +81,7 @@ func (l *Library) ImportBook(info BookInfo, importData ImportData) (int, error) 
 		ImportData: importData,
 	}
 
-	return bookImport.BookId, goes.Apply(l.AggregateState, bookImport)
+	return bookImport.BookId, goes.Apply(l, bookImport)
 }
 
 func (l *Library) onBookImported(e BookImported) {
@@ -107,7 +107,7 @@ func (l *Library) AddBook(book BookInfo, tags []string) (int, error) {
 		DateAdded: time.Now(),
 	}
 
-	return added.BookId, goes.Apply(l.AggregateState, added)
+	return added.BookId, goes.Apply(l, added)
 }
 
 func (l *Library) onBookAdded(e BookAdded) {
@@ -136,7 +136,7 @@ func (l *Library) AddBookInfo(bookId int, info BookInfo) error {
 		return fmt.Errorf("no book found for id '%v'", bookId)
 	}
 
-	return goes.Apply(l.AggregateState, BookInfoAdded{BookId: bookId, Info: info})
+	return goes.Apply(l, BookInfoAdded{BookId: bookId, Info: info})
 }
 
 func (l *Library) onBookInfoAdded(e BookInfoAdded) {
@@ -153,7 +153,7 @@ func (l *Library) StartReading(isbn string, when time.Time) error {
 		when = time.Now()
 	}
 
-	return goes.Apply(l.AggregateState, BookStarted{
+	return goes.Apply(l, BookStarted{
 		Isbn: isbn,
 		When: when,
 	})
@@ -168,7 +168,7 @@ func (l *Library) FinishReading(isbn string, when time.Time) error {
 		when = time.Now()
 	}
 
-	return goes.Apply(l.AggregateState, BookFinished{
+	return goes.Apply(l, BookFinished{
 		Isbn: isbn,
 		When: when,
 	})

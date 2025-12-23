@@ -51,12 +51,18 @@ func Register[TEvent any](state *AggregateState, handler func(event TEvent)) {
 	}
 }
 
-func Apply[TEvent any](state *AggregateState, event TEvent) error {
-	name := reflect.TypeOf(event).Name()
+func nameOf(aggregate Aggregate) string {
+	return reflect.TypeOf(aggregate).Elem().Name()
+}
 
-	handler, found := state.handlers[name]
+func Apply[TEvent any](aggregate Aggregate, event TEvent) error {
+	eventName := reflect.TypeOf(event).Name()
+	aggregateName := nameOf(aggregate)
+
+	state := aggregate.state()
+	handler, found := state.handlers[eventName]
 	if !found {
-		return fmt.Errorf("no handler registered for %s", name)
+		return fmt.Errorf("no handler registered for %s", eventName)
 	}
 
 	if err := handler(event); err != nil {
@@ -64,11 +70,12 @@ func Apply[TEvent any](state *AggregateState, event TEvent) error {
 	}
 
 	descriptor := EventDescriptor{
-		AggregateID: state.id,
-		Sequence:    state.sequence + len(state.pendingEvents) + 1,
-		Timestamp:   time.Now().UTC(),
-		EventType:   name,
-		Event:       event,
+		AggregateID:   state.id,
+		AggregateType: aggregateName,
+		Sequence:      state.sequence + len(state.pendingEvents) + 1,
+		Timestamp:     time.Now().UTC(),
+		EventType:     eventName,
+		Event:         event,
 	}
 
 	state.pendingEvents = append(state.pendingEvents, descriptor)
@@ -91,11 +98,12 @@ func Sequence(state *AggregateState) int {
 }
 
 type EventDescriptor struct {
-	AggregateID uuid.UUID
-	Sequence    int
-	Timestamp   time.Time
-	EventType   string
-	Event       any
+	AggregateID   uuid.UUID
+	AggregateType string
+	Sequence      int
+	Timestamp     time.Time
+	EventType     string
+	Event         any
 
 	marshalled []byte
 }

@@ -84,8 +84,8 @@ func (s *SqliteStore) Save(ctx context.Context, aggregate Aggregate) error {
 	}
 
 	insertEvent, err := tx.PrepareContext(ctx, `
-		insert into events (aggregate_id, sequence, timestamp, event_type, event_data)
-		values (?, ?, ?, ?, ?)`,
+		insert into events (aggregate_id, aggregate_type, sequence, timestamp, event_type, event_data)
+		values (?, ?, ?, ?, ?, ?)`,
 	)
 	if err != nil {
 		return tracing.Error(span, err)
@@ -97,7 +97,7 @@ func (s *SqliteStore) Save(ctx context.Context, aggregate Aggregate) error {
 			return tracing.Error(span, err)
 		}
 
-		_, err = insertEvent.ExecContext(ctx, e.AggregateID, e.Sequence, e.Timestamp, e.EventType, eventJson)
+		_, err = insertEvent.ExecContext(ctx, e.AggregateID, e.AggregateType, e.Sequence, e.Timestamp, e.EventType, eventJson)
 		if err != nil {
 			return err
 		}
