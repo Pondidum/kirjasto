@@ -28,7 +28,7 @@ func TestIsbnSorting(t *testing.T) {
 }
 
 func TestAddingBooks(t *testing.T) {
-	l := NewLibrary(LibraryID)
+	l := CreateLibrary(LibraryID)
 
 	id1, err := l.ImportBook(BookInfo{}, ImportData{})
 	require.NoError(t, err)

@@ -30,7 +30,7 @@ func blankLibrary() *Library {
 	return library
 }
 
-func NewLibrary(id uuid.UUID) *Library {
+func CreateLibrary(id uuid.UUID) *Library {
 	library := blankLibrary()
 
 	goes.Apply(library.AggregateState, LibraryCreated{

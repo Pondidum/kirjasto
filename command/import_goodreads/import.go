@@ -74,7 +74,7 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		if err != goes.ErrNotFound {
 			return tracing.Error(span, err)
 		}
-		library = domain.NewLibrary(domain.LibraryID)
+		library = domain.CreateLibrary(domain.LibraryID)
 	}
 
 	openlib, err := openlibrary.NewClient(ctx, config.OpenLibraryDb)
