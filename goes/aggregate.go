@@ -93,10 +93,6 @@ func SetID(state *AggregateState, id uuid.UUID) {
 	state.id = id
 }
 
-func Sequence(state *AggregateState) int {
-	return state.sequence
-}
-
 type EventDescriptor struct {
 	AggregateID   uuid.UUID
 	AggregateType string
