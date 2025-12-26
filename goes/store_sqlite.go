@@ -92,16 +92,11 @@ func (s *SqliteStore) Save(ctx context.Context, aggregate Aggregate) error {
 	}
 
 	for _, e := range state.pendingEvents {
-		eventJson, err := e.Marshal()
+		_, err = insertEvent.ExecContext(ctx, e.AggregateID, e.AggregateType, e.Sequence, e.Timestamp, e.EventType, e.json)
 		if err != nil {
 			return tracing.Error(span, err)
 		}
 
-		_, err = insertEvent.ExecContext(ctx, e.AggregateID, e.AggregateType, e.Sequence, e.Timestamp, e.EventType, eventJson)
-		if err != nil {
-			return err
-		}
-		if err := s.projections.Project(ctx, tx, e); err != nil {
 			return err
 		}
 	}
@@ -155,15 +150,7 @@ func (s *SqliteStore) Load(ctx context.Context, aggregateID uuid.UUID) iter.Seq2
 				AggregateID: aggregateID,
 			}
 
-			var eventJson []byte
-
-			if err := rows.Scan(&e.Sequence, &e.Timestamp, &e.EventType, &eventJson); err != nil {
-				if !yield(e, err) {
-					return
-				}
-			}
-
-			if e.Event, err = eventFromJson(e.EventType, eventJson); err != nil {
+			if err := rows.Scan(&e.Sequence, &e.Timestamp, &e.EventType, &e.json); err != nil {
 				if !yield(e, err) {
 					return
 				}
@@ -196,14 +183,7 @@ func (s *SqliteStore) allEvents(ctx context.Context, tx *sql.Tx) iter.Seq2[Event
 
 			e := EventDescriptor{}
 
-			var eventJson []byte
-			if err := rows.Scan(&e.AggregateID, &e.Sequence, &e.Timestamp, &e.EventType, &eventJson); err != nil {
-				if !yield(e, err) {
-					return
-				}
-			}
-
-			if e.Event, err = eventFromJson(e.EventType, eventJson); err != nil {
+			if err := rows.Scan(&e.AggregateID, &e.Sequence, &e.Timestamp, &e.EventType, &e.json); err != nil {
 				if !yield(e, err) {
 					return
 				}

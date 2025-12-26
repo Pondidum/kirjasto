@@ -69,13 +69,18 @@ func Apply[TEvent any](aggregate Aggregate, event TEvent) error {
 		return err
 	}
 
+	content, err := json.Marshal(event)
+	if err != nil {
+		return err
+	}
+
 	descriptor := EventDescriptor{
 		AggregateID:   state.id,
 		AggregateType: aggregateName,
 		Sequence:      state.sequence + len(state.pendingEvents) + 1,
 		Timestamp:     time.Now().UTC(),
 		EventType:     eventName,
-		Event:         event,
+		json:          content,
 	}
 
 	state.pendingEvents = append(state.pendingEvents, descriptor)
@@ -93,40 +98,21 @@ func SetID(state *AggregateState, id uuid.UUID) {
 	state.id = id
 }
 
-type EventDescriptor struct {
-	AggregateID   uuid.UUID
-	AggregateType string
-	Sequence      int
-	Timestamp     time.Time
-	EventType     string
-	Event         any
-
-	marshalled []byte
-}
-
-func (e *EventDescriptor) Marshal() ([]byte, error) {
-	if len(e.marshalled) == 0 {
-		content, err := json.Marshal(e.Event)
-		if err != nil {
-			return nil, err
-		}
-
-		e.marshalled = content
-	}
-
-	return e.marshalled, nil
-}
-
-func (a *AggregateState) replayEvent(event EventDescriptor) error {
-	handler, found := a.handlers[event.EventType]
-	if !found {
-		return fmt.Errorf("no handler registered for %s", event.EventType)
-	}
-
-	if err := handler(event.Event); err != nil {
+func (a *AggregateState) replayEvent(ed EventDescriptor) error {
+	event, err := ed.Event()
+	if err != nil {
 		return err
 	}
 
-	a.sequence = event.Sequence
+	handler, found := a.handlers[ed.EventType]
+	if !found {
+		return fmt.Errorf("no handler registered for %s", ed.EventType)
+	}
+
+	if err := handler(event); err != nil {
+		return err
+	}
+
+	a.sequence = ed.Sequence
 	return nil
 }
