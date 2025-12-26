@@ -45,6 +45,7 @@ func (s *SqliteStore) Initialise(ctx context.Context) error {
 CREATE TABLE IF NOT EXISTS events(
 	event_id integer primary key autoincrement,
 	aggregate_id text not null,
+	aggregate_type text not null,
 	sequence integer not null,
 	timestamp timestamp not null,
 	event_type text not null,
@@ -174,7 +175,7 @@ func (s *SqliteStore) allEvents(ctx context.Context, tx *sql.Tx) iter.Seq2[Event
 	return func(yield func(EventDescriptor, error) bool) {
 
 		rows, err := tx.QueryContext(ctx, `
-			select aggregate_id, sequence, timestamp, event_type, event_data
+			select aggregate_id, aggregate_type, sequence, timestamp, event_type, event_data
 			from events
 			order by event_id asc
 		`)
@@ -189,7 +190,7 @@ func (s *SqliteStore) allEvents(ctx context.Context, tx *sql.Tx) iter.Seq2[Event
 
 			e := EventDescriptor{}
 
-			if err := rows.Scan(&e.AggregateID, &e.Sequence, &e.Timestamp, &e.EventType, &e.json); err != nil {
+			if err := rows.Scan(&e.AggregateID, &e.AggregateType, &e.Sequence, &e.Timestamp, &e.EventType, &e.json); err != nil {
 				if !yield(e, err) {
 					return
 				}
