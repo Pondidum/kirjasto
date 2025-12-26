@@ -60,12 +60,8 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		return tracing.Error(span, err)
 	}
 
-	eventStore := goes.NewSqliteStore(db)
-	if err := eventStore.Initialise(ctx); err != nil {
-		return tracing.Error(span, err)
-	}
-
-	if err := domain.RegisterProjections(eventStore); err != nil {
+	eventStore, err := domain.NewStore(ctx, db)
+	if err != nil {
 		return tracing.Error(span, err)
 	}
 
