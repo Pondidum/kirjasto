@@ -19,18 +19,14 @@ var tr = otel.Tracer("goes")
 
 func NewSqliteStore(db *sql.DB) *SqliteStore {
 	return &SqliteStore{
-		db:          db,
-		projections: Projectionist{
-			projections: map[string]Projection{},
-		},
-		factory:     AggregateFactory{},
+		db:      db,
+		factory: AggregateFactory{},
 	}
 }
 
 type SqliteStore struct {
-	db          *sql.DB
-	projections Projectionist
-	factory     AggregateFactory
+	db      *sql.DB
+	factory AggregateFactory
 }
 
 func (s *SqliteStore) RegisterAggregate(name string, factory func() Aggregate) {
@@ -55,7 +51,6 @@ CREATE TABLE IF NOT EXISTS events(
 
 create table if not exists auto_projections(
 	aggregate_id text primary key,
-	view_type text not null,
 	view text not null
 );`
 
@@ -64,10 +59,6 @@ create table if not exists auto_projections(
 	}
 
 	return nil
-}
-
-func (s *SqliteStore) RegisterProjection(name string, projection Projection) error {
-	return s.projections.RegisterProjection(name, projection)
 }
 
 func (s *SqliteStore) Save(ctx context.Context, aggregate Aggregate) error {
@@ -86,10 +77,6 @@ func (s *SqliteStore) Save(ctx context.Context, aggregate Aggregate) error {
 		return tracing.Error(span, err)
 	}
 
-	if err := s.projections.Load(ctx, tx); err != nil {
-		return tracing.Error(span, err)
-	}
-
 	insertEvent, err := tx.PrepareContext(ctx, `
 		insert into events (aggregate_id, aggregate_type, sequence, timestamp, event_type, event_data)
 		values (?, ?, ?, ?, ?, ?)`,
@@ -101,18 +88,40 @@ func (s *SqliteStore) Save(ctx context.Context, aggregate Aggregate) error {
 	for _, e := range state.pendingEvents {
 		_, err = insertEvent.ExecContext(ctx, e.AggregateID, e.AggregateType, e.Sequence, e.Timestamp, e.EventType, e.json)
 		if err != nil {
-			return tracing.Error(span, err)
-		}
-
 			return err
 		}
 	}
 
-	if err := s.projections.Save(ctx, tx); err != nil {
+	if err := s.saveAutoProjection(ctx, tx, aggregate); err != nil {
 		return tracing.Error(span, err)
 	}
 
 	if err := tx.Commit(); err != nil {
+		return tracing.Error(span, err)
+	}
+
+	return nil
+}
+
+func (s *SqliteStore) saveAutoProjection(ctx context.Context, tx *sql.Tx, aggregate Aggregate) error {
+	ctx, span := tr.Start(ctx, "save_autoprojection")
+	defer span.End()
+
+	view, err := json.Marshal(aggregate)
+	if err != nil {
+		return tracing.Error(span, err)
+	}
+	stmt := `
+		insert into auto_projections (aggregate_id, view)
+		values (@aggregate_id, @view)
+		on conflict(aggregate_id) do update set
+			view = excluded.view
+	`
+	_, err = tx.ExecContext(ctx,
+		stmt,
+		sql.Named("aggregate_id", aggregate.state().id.String()),
+		sql.Named("view", string(view)))
+	if err != nil {
 		return tracing.Error(span, err)
 	}
 
@@ -136,6 +145,7 @@ func validateSequence(ctx context.Context, tx *sql.Tx, aggregateID uuid.UUID, me
 }
 
 func (s *SqliteStore) Load(ctx context.Context, aggregateID uuid.UUID) iter.Seq2[EventDescriptor, error] {
+
 	return func(yield func(EventDescriptor, error) bool) {
 
 		rows, err := s.db.QueryContext(ctx, `
@@ -213,26 +223,36 @@ func (s *SqliteStore) RebuildAll(ctx context.Context) error {
 	}
 	defer tx.Rollback()
 
-	if err := s.projections.Load(ctx, tx); err != nil {
-		return tracing.Error(span, err)
-	}
+	aggregates := map[uuid.UUID]Aggregate{}
 
-	if err := s.projections.Wipe(ctx, tx); err != nil {
-		return tracing.Error(span, err)
-	}
-
-	for event, err := range s.allEvents(ctx, tx) {
+	events := s.allEvents(ctx, tx)
+	for event, err := range events {
 		if err != nil {
 			return tracing.Error(span, err)
 		}
 
-		if err := s.projections.Project(ctx, tx, event); err != nil {
+		// this should be a MRU cache really, and rather than assuming a non-existing entry means we are starting
+		// from the first event, we should check the Sequence and load from the db if needed.
+		aggregate, found := aggregates[event.AggregateID]
+		if !found {
+			factory, found := s.factory[event.AggregateType]
+			if !found {
+				return tracing.Errorf(span, "unable to find aggregate factory for '%s'", event.AggregateType)
+			}
+
+			aggregate = factory()
+			aggregates[event.AggregateID] = aggregate
+		}
+
+		if err := aggregate.state().replayEvent(event); err != nil {
 			return tracing.Error(span, err)
 		}
 	}
 
-	if err := s.projections.Save(ctx, tx); err != nil {
-		return tracing.Error(span, err)
+	for _, aggregate := range aggregates {
+		if err := s.saveAutoProjection(ctx, tx, aggregate); err != nil {
+			return tracing.Error(span, err)
+		}
 	}
 
 	if err := tx.Commit(); err != nil {
