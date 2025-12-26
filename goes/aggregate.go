@@ -9,6 +9,10 @@ import (
 	"github.com/google/uuid"
 )
 
+type Aggregate interface {
+	state() *AggregateState
+}
+
 func NewAggregateState() *AggregateState {
 	return &AggregateState{
 		sequence: -1,

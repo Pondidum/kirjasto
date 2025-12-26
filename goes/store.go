@@ -39,10 +39,6 @@ func Load(ctx context.Context, store Store, state *AggregateState) error {
 	return nil
 }
 
-type Aggregate interface {
-	state() *AggregateState
-}
-
 func Save(ctx context.Context, store Store, aggregate Aggregate) error {
 	state := aggregate.state()
 	pending := len(state.pendingEvents)

@@ -19,16 +19,22 @@ var tr = otel.Tracer("goes")
 
 func NewSqliteStore(db *sql.DB) *SqliteStore {
 	return &SqliteStore{
-		db: db,
+		db:          db,
 		projections: Projectionist{
 			projections: map[string]Projection{},
 		},
+		factory:     AggregateFactory{},
 	}
 }
 
 type SqliteStore struct {
 	db          *sql.DB
 	projections Projectionist
+	factory     AggregateFactory
+}
+
+func (s *SqliteStore) RegisterAggregate(name string, factory func() Aggregate) {
+	s.factory[name] = factory
 }
 
 func (s *SqliteStore) Initialise(ctx context.Context) error {
