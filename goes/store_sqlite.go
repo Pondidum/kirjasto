@@ -18,20 +18,24 @@ var tr = otel.Tracer("goes")
 
 func NewSqliteStore(db *sql.DB) *SqliteStore {
 	return &SqliteStore{
-		db:                   db,
-		factory:              AggregateFactory{},
-		aggregateProjections: []AggregateProjection{},
+		db:          db,
+		factory:     AggregateFactory{},
+		projections: []AggregateProjection{},
 	}
 }
 
 type SqliteStore struct {
-	db                   *sql.DB
-	factory              AggregateFactory
-	aggregateProjections []AggregateProjection
+	db          *sql.DB
+	factory     AggregateFactory
+	projections []AggregateProjection
 }
 
 func (s *SqliteStore) RegisterAggregate(name string, factory func() Aggregate) {
 	s.factory[name] = factory
+}
+
+func (s *SqliteStore) RegisterProjection(projection AggregateProjection) {
+	s.projections = append(s.projections, projection)
 }
 
 func (s *SqliteStore) Initialise(ctx context.Context) error {
@@ -53,7 +57,13 @@ CREATE TABLE IF NOT EXISTS events(
 create table if not exists auto_projections(
 	aggregate_id text primary key,
 	view text not null
-);`
+);
+
+create table if not exists views(
+	name text not null primary key,
+	view text not null
+);
+`
 
 	if _, err := s.db.ExecContext(ctx, createTables); err != nil {
 		return tracing.Error(span, err)
@@ -114,7 +124,7 @@ func (s *SqliteStore) storeEvents(ctx context.Context, tx *sql.Tx, state *Aggreg
 
 func (s *SqliteStore) runProjections(ctx context.Context, tx *sql.Tx, aggregate Aggregate) error {
 
-	for _, ap := range s.aggregateProjections {
+	for _, ap := range s.projections {
 		if err := ap.Project(ctx, tx, aggregate); err != nil {
 			return err
 		}
@@ -239,9 +249,13 @@ func (s *SqliteStore) RebuildAll(ctx context.Context) error {
 			aggregates[event.AggregateID] = aggregate
 		}
 
-		if err := aggregate.state().replayEvent(event); err != nil {
+		state := aggregate.state()
+		if err := state.replayEvent(event); err != nil {
 			return tracing.Error(span, err)
 		}
+
+		// done so that projections can read the events from state
+		state.pendingEvents = append(state.pendingEvents, event)
 	}
 
 	for _, aggregate := range aggregates {
@@ -249,6 +263,7 @@ func (s *SqliteStore) RebuildAll(ctx context.Context) error {
 		if err := s.runProjections(ctx, tx, aggregate); err != nil {
 			return tracing.Error(span, err)
 		}
+
 	}
 
 	if err := tx.Commit(); err != nil {
