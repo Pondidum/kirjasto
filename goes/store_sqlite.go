@@ -78,19 +78,8 @@ func (s *SqliteStore) Save(ctx context.Context, aggregate Aggregate) error {
 		return tracing.Error(span, err)
 	}
 
-	insertEvent, err := tx.PrepareContext(ctx, `
-		insert into events (aggregate_id, aggregate_type, sequence, timestamp, event_type, event_data)
-		values (?, ?, ?, ?, ?, ?)`,
-	)
-	if err != nil {
-		return tracing.Error(span, err)
-	}
-
-	for _, e := range state.pendingEvents {
-		_, err = insertEvent.ExecContext(ctx, e.AggregateID, e.AggregateType, e.Sequence, e.Timestamp, e.EventType, e.json)
-		if err != nil {
-			return err
-		}
+	if err := s.storeEvents(ctx, tx, state); err != nil {
+		return err
 	}
 
 	if err := s.runProjections(ctx, tx, aggregate); err != nil {
@@ -99,6 +88,25 @@ func (s *SqliteStore) Save(ctx context.Context, aggregate Aggregate) error {
 
 	if err := tx.Commit(); err != nil {
 		return tracing.Error(span, err)
+	}
+
+	return nil
+}
+
+func (s *SqliteStore) storeEvents(ctx context.Context, tx *sql.Tx, state *AggregateState) error {
+	insertEvent, err := tx.PrepareContext(ctx, `
+		insert into events (aggregate_id, aggregate_type, sequence, timestamp, event_type, event_data)
+		values (?, ?, ?, ?, ?, ?)`,
+	)
+	if err != nil {
+		return err
+	}
+
+	for _, e := range state.pendingEvents {
+		_, err = insertEvent.ExecContext(ctx, e.AggregateID, e.AggregateType, e.Sequence, e.Timestamp, e.EventType, e.json)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
