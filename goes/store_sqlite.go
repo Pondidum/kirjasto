@@ -3,7 +3,6 @@ package goes
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"iter"
@@ -19,14 +18,16 @@ var tr = otel.Tracer("goes")
 
 func NewSqliteStore(db *sql.DB) *SqliteStore {
 	return &SqliteStore{
-		db:      db,
-		factory: AggregateFactory{},
+		db:                   db,
+		factory:              AggregateFactory{},
+		aggregateProjections: []AggregateProjection{},
 	}
 }
 
 type SqliteStore struct {
-	db      *sql.DB
-	factory AggregateFactory
+	db                   *sql.DB
+	factory              AggregateFactory
+	aggregateProjections []AggregateProjection
 }
 
 func (s *SqliteStore) RegisterAggregate(name string, factory func() Aggregate) {
@@ -92,7 +93,7 @@ func (s *SqliteStore) Save(ctx context.Context, aggregate Aggregate) error {
 		}
 	}
 
-	if err := s.saveAutoProjection(ctx, tx, aggregate); err != nil {
+	if err := s.runProjections(ctx, tx, aggregate); err != nil {
 		return tracing.Error(span, err)
 	}
 
@@ -103,26 +104,12 @@ func (s *SqliteStore) Save(ctx context.Context, aggregate Aggregate) error {
 	return nil
 }
 
-func (s *SqliteStore) saveAutoProjection(ctx context.Context, tx *sql.Tx, aggregate Aggregate) error {
-	ctx, span := tr.Start(ctx, "save_autoprojection")
-	defer span.End()
+func (s *SqliteStore) runProjections(ctx context.Context, tx *sql.Tx, aggregate Aggregate) error {
 
-	view, err := json.Marshal(aggregate)
-	if err != nil {
-		return tracing.Error(span, err)
-	}
-	stmt := `
-		insert into auto_projections (aggregate_id, view)
-		values (@aggregate_id, @view)
-		on conflict(aggregate_id) do update set
-			view = excluded.view
-	`
-	_, err = tx.ExecContext(ctx,
-		stmt,
-		sql.Named("aggregate_id", aggregate.state().id.String()),
-		sql.Named("view", string(view)))
-	if err != nil {
-		return tracing.Error(span, err)
+	for _, ap := range s.aggregateProjections {
+		if err := ap.Project(ctx, tx, aggregate); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -250,7 +237,8 @@ func (s *SqliteStore) RebuildAll(ctx context.Context) error {
 	}
 
 	for _, aggregate := range aggregates {
-		if err := s.saveAutoProjection(ctx, tx, aggregate); err != nil {
+
+		if err := s.runProjections(ctx, tx, aggregate); err != nil {
 			return tracing.Error(span, err)
 		}
 	}
