@@ -9,6 +9,7 @@ import (
 func NewStore(ctx context.Context, db *sql.DB) (*goes.SqliteStore, error) {
 	store := goes.NewSqliteStore(db)
 	store.RegisterAggregate(goes.FactoryFor(NewLibrary))
+	store.RegisterProjection(missingDataProjection)
 
 	if err := store.Initialise(ctx); err != nil {
 		return nil, err
