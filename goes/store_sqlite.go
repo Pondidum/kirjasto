@@ -11,10 +11,24 @@ import (
 	"github.com/google/uuid"
 	_ "github.com/mattn/go-sqlite3"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 var ErrNotFound = errors.New("aggregate does not exist")
 var tr = otel.Tracer("goes")
+
+type Store interface {
+	Save(ctx context.Context, aggregate Aggregate) error
+	Load(ctx context.Context, aggregateID uuid.UUID, aggregate Aggregate) error
+}
+
+type SqliteStore struct {
+	db          *sql.DB
+	factory     AggregateFactory
+	projections []AggregateProjection
+}
+
+var _ Store = &SqliteStore{}
 
 func NewSqliteStore(db *sql.DB) *SqliteStore {
 	return &SqliteStore{
@@ -22,12 +36,6 @@ func NewSqliteStore(db *sql.DB) *SqliteStore {
 		factory:     AggregateFactory{},
 		projections: []AggregateProjection{},
 	}
-}
-
-type SqliteStore struct {
-	db          *sql.DB
-	factory     AggregateFactory
-	projections []AggregateProjection
 }
 
 func (s *SqliteStore) RegisterAggregate(name string, factory func() Aggregate) {
@@ -76,13 +84,17 @@ func (s *SqliteStore) Save(ctx context.Context, aggregate Aggregate) error {
 	ctx, span := tr.Start(ctx, "save")
 	defer span.End()
 
+	state := aggregate.state()
+	pending := len(state.pendingEvents)
+	if pending == 0 {
+		return nil
+	}
+
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return tracing.Error(span, err)
 	}
 	defer tx.Rollback()
-
-	state := aggregate.state()
 
 	if err := validateSequence(ctx, tx, state.id, state.sequence); err != nil {
 		return tracing.Error(span, err)
@@ -99,6 +111,9 @@ func (s *SqliteStore) Save(ctx context.Context, aggregate Aggregate) error {
 	if err := tx.Commit(); err != nil {
 		return tracing.Error(span, err)
 	}
+
+	state.sequence = state.pendingEvents[pending-1].Sequence
+	state.pendingEvents = nil
 
 	return nil
 }
@@ -149,7 +164,36 @@ func validateSequence(ctx context.Context, tx *sql.Tx, aggregateID uuid.UUID, me
 	return nil
 }
 
-func (s *SqliteStore) Load(ctx context.Context, aggregateID uuid.UUID) iter.Seq2[EventDescriptor, error] {
+func (s *SqliteStore) Load(ctx context.Context, aggregateID uuid.UUID, aggregate Aggregate) error {
+	ctx, span := tr.Start(ctx, "load")
+	defer span.End()
+
+	state := aggregate.state()
+	SetID(state, aggregateID)
+
+	count := 0
+	for event, err := range s.eventsFor(ctx, state.id) {
+		if err != nil {
+			return tracing.Error(span, err)
+		}
+
+		count++
+
+		if err := state.replayEvent(event); err != nil {
+			return err
+		}
+	}
+
+	span.SetAttributes(attribute.Int("event.count", count))
+	if count == 0 {
+		return ErrNotFound
+	}
+
+	return nil
+
+}
+
+func (s *SqliteStore) eventsFor(ctx context.Context, aggregateID uuid.UUID) iter.Seq2[EventDescriptor, error] {
 
 	return func(yield func(EventDescriptor, error) bool) {
 

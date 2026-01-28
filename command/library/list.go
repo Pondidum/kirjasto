@@ -45,7 +45,10 @@ func (c *ListCommand) Execute(ctx context.Context, config *config.Config, args [
 	}
 
 	eventStore := goes.NewSqliteStore(reader)
-	library, err := domain.LoadLibrary(ctx, eventStore, domain.LibraryID)
+	library := domain.NewLibrary()
+	if err := eventStore.Load(ctx, domain.LibraryID, library); err != nil {
+		return tracing.Error(span, err)
+	}
 
 	c.printStats(ctx, library)
 	if c.statsOnly {

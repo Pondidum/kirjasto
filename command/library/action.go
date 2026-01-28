@@ -4,7 +4,6 @@ import (
 	"context"
 	"kirjasto/config"
 	"kirjasto/domain"
-	"kirjasto/goes"
 	"kirjasto/storage"
 	"kirjasto/tracing"
 )
@@ -23,8 +22,8 @@ func libraryAction(ctx context.Context, config *config.Config, action func(libra
 		return tracing.Error(span, err)
 	}
 
-	library, err := domain.LoadLibrary(ctx, store, domain.LibraryID)
-	if err != nil {
+	library := domain.NewLibrary()
+	if store.Load(ctx, domain.LibraryID, library); err != nil {
 		return tracing.Error(span, err)
 	}
 
@@ -32,7 +31,7 @@ func libraryAction(ctx context.Context, config *config.Config, action func(libra
 		return tracing.Error(span, err)
 	}
 
-	if err := goes.Save(ctx, store, library); err != nil {
+	if err := store.Save(ctx, library); err != nil {
 		return tracing.Error(span, err)
 	}
 

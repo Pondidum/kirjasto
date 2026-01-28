@@ -1,10 +1,8 @@
 package domain
 
 import (
-	"context"
 	"fmt"
 	"kirjasto/goes"
-	"kirjasto/tracing"
 	"time"
 
 	"github.com/google/uuid"
@@ -38,20 +36,6 @@ func CreateLibrary(id uuid.UUID) *Library {
 	})
 
 	return library
-}
-
-func LoadLibrary(ctx context.Context, eventStore *goes.SqliteStore, id uuid.UUID) (*Library, error) {
-	ctx, span := tr.Start(ctx, "load_library")
-	defer span.End()
-
-	library := NewLibrary()
-	goes.SetID(library.AggregateState, id)
-
-	if err := goes.Load(ctx, eventStore, library.AggregateState); err != nil {
-		return nil, tracing.Error(span, err)
-	}
-
-	return library, nil
 }
 
 type Library struct {

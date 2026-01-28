@@ -65,8 +65,8 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		return tracing.Error(span, err)
 	}
 
-	library, err := domain.LoadLibrary(ctx, eventStore, domain.LibraryID)
-	if err != nil {
+	library := domain.NewLibrary()
+	if err := eventStore.Load(ctx, domain.LibraryID, library); err != nil {
 		if err != goes.ErrNotFound {
 			return tracing.Error(span, err)
 		}
@@ -82,7 +82,7 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		return tracing.Error(span, err)
 	}
 
-	if err := goes.Save(ctx, eventStore, library); err != nil {
+	if err := eventStore.Save(ctx, library); err != nil {
 		return tracing.Error(span, err)
 	}
 
