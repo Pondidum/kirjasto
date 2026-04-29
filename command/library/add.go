@@ -54,7 +54,10 @@ func (c *AddCommand) Execute(ctx context.Context, config *config.Config, args []
 		return tracing.Errorf(span, "The books must have at least one of: isbn, title")
 	}
 
-	c.book.PublishDate = time.Date(c.publishYear, 0, 0, 0, 0, 0, 0, time.Now().Location())
+	if c.publishYear > 0 {
+		c.book.PublishDate = time.Date(c.publishYear, 0, 0, 0, 0, 0, 0, time.Now().Location())
+	}
+
 	c.book.Authors = make([]domain.Author, len(c.authors))
 	for i, author := range c.authors {
 		c.book.Authors[i] = domain.Author{
