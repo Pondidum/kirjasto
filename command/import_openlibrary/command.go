@@ -66,7 +66,7 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 	fmt.Println("-", bestAuthors)
 	fmt.Println("-", bestEditions)
 
-	writer, err := storage.Writer(ctx, config.OpenLibraryDb)
+	writer, err := storage.FastWriter(ctx, config.OpenLibraryDb)
 	if err != nil {
 		return tracing.Error(span, err)
 	}
@@ -231,52 +231,24 @@ func (c *ImportCommand) populateAuthors(ctx context.Context, writer *sql.DB, aut
 	}
 	defer tx.Rollback()
 
-	authorsStatement := `
-	insert into
-		authors (id, data)
-		values  (@id, @data)
-	on conflict(id) do update set
-		data  = excluded.data
-	`
-
-	statement, err := tx.PrepareContext(ctx, authorsStatement)
-	if err != nil {
+	if _, err := tx.ExecContext(ctx, "delete from authors"); err != nil {
 		return tracing.Error(span, err)
 	}
-	defer statement.Close()
 
-	fmt.Println("Populating authors...")
-
-	count := int64(0)
-	for author, err := range iterateFile(authorsFile) {
-		if err != nil {
-			return tracing.Error(span, err)
-		}
+	unmarshal := func(b []byte) (string, []byte, error) {
 
 		record := &Record{}
-		if err := json.Unmarshal(author, record); err != nil {
-			return tracing.Error(span, err)
+		if err := json.Unmarshal(b, record); err != nil {
+			return "", b, err
 		}
 
-		result, err := statement.ExecContext(ctx,
-			sql.Named("id", record.Key),
-			sql.Named("data", author),
-		)
-		if err != nil {
-			return err
-		}
-		rows, err := result.RowsAffected()
-		if err != nil {
-			return tracing.Error(span, err)
-		}
-		count += rows
-
-		if count%10000 == 0 {
-			fmt.Print(".")
-		}
+		return record.Key, b, nil
 	}
 
-	fmt.Println()
+	if err := insertBulk(ctx, tx, "authors", authorsFile, unmarshal); err != nil {
+		return tracing.Error(span, err)
+	}
+
 	fmt.Println("Creating FTS table")
 
 	ftsStatement := `
@@ -295,7 +267,7 @@ func (c *ImportCommand) populateAuthors(ctx context.Context, writer *sql.DB, aut
 		return tracing.Error(span, err)
 	}
 
-	fmt.Printf("Done")
+	fmt.Println("Done")
 
 	return nil
 }
@@ -304,7 +276,21 @@ func (c *ImportCommand) populateEditions(ctx context.Context, writer *sql.DB, ed
 	ctx, span := tr.Start(ctx, "populate_editions")
 	defer span.End()
 
-	if err := c.insertEditions(ctx, writer, editionsFile); err != nil {
+	tx, err := writer.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return tracing.Error(span, err)
+	}
+	defer tx.Rollback()
+
+	unmarshal := func(b []byte) (string, []byte, error) {
+		edition := &editionDto{}
+		if err := json.Unmarshal(b, edition); err != nil {
+			return c.fixAuthors(ctx, b)
+		}
+		return edition.Key, b, nil
+	}
+
+	if err := insertBulk(ctx, tx, "editions", editionsFile, unmarshal); err != nil {
 		return tracing.Error(span, err)
 	}
 
@@ -317,7 +303,7 @@ func (c *ImportCommand) populateEditions(ctx context.Context, writer *sql.DB, ed
 	select id, data ->> '$.title', data ->> '$.subtitle'
 	from editions
 	`
-	if _, err := writer.ExecContext(ctx, ftsStatement); err != nil {
+	if _, err := tx.ExecContext(ctx, ftsStatement); err != nil {
 		return tracing.Error(span, err)
 	}
 
@@ -333,7 +319,7 @@ func (c *ImportCommand) populateEditions(ctx context.Context, writer *sql.DB, ed
 	select editions.id,  isbns.value
 	from editions, json_each(editions.data, '$.isbn_13') isbns
 	`
-	if _, err := writer.ExecContext(ctx, isbns); err != nil {
+	if _, err := tx.ExecContext(ctx, isbns); err != nil {
 		return tracing.Error(span, err)
 	}
 
@@ -344,7 +330,7 @@ func (c *ImportCommand) populateEditions(ctx context.Context, writer *sql.DB, ed
 	from editions, json_each(editions.data, '$.works') works
 	`
 
-	if _, err := writer.ExecContext(ctx, works); err != nil {
+	if _, err := tx.ExecContext(ctx, works); err != nil {
 		return tracing.Error(span, err)
 	}
 
@@ -355,14 +341,12 @@ func (c *ImportCommand) populateEditions(ctx context.Context, writer *sql.DB, ed
 	from editions, json_each(editions.data, '$.authors') authors
 	`
 
-	if _, err := writer.ExecContext(ctx, authors); err != nil {
+	if _, err := tx.ExecContext(ctx, authors); err != nil {
 		return tracing.Error(span, err)
 	}
 
-	fmt.Println("Compressing DB")
-	compress := `vacuum`
-
-	if _, err := writer.ExecContext(ctx, compress); err != nil {
+	fmt.Println("Committing")
+	if err := tx.Commit(); err != nil {
 		return tracing.Error(span, err)
 	}
 
@@ -371,77 +355,7 @@ func (c *ImportCommand) populateEditions(ctx context.Context, writer *sql.DB, ed
 	return nil
 }
 
-func (c *ImportCommand) insertEditions(ctx context.Context, writer *sql.DB, editionsFile io.Reader) error {
-	ctx, span := tr.Start(ctx, "insert_editions")
-	defer span.End()
-
-	tx, err := writer.BeginTx(ctx, &sql.TxOptions{})
-	if err != nil {
-		return tracing.Error(span, err)
-	}
-	defer tx.Rollback()
-
-	editionsStatement := `
-	insert into
-		editions (id, data)
-		values  (@id, @data)
-	on conflict(id) do update set
-		data  = excluded.data
-	`
-
-	statement, err := tx.PrepareContext(ctx, editionsStatement)
-	if err != nil {
-		return tracing.Error(span, err)
-	}
-	defer statement.Close()
-
-	fmt.Println("Populating editions...")
-
-	count := int64(0)
-	for content, err := range iterateFile(editionsFile) {
-		if err != nil {
-			return tracing.Error(span, err)
-		}
-
-		edition := &editionDto{}
-		if err := json.Unmarshal(content, edition); err != nil {
-
-			fixed, err := c.fixAuthors(ctx, content)
-			if err != nil {
-				return tracing.Error(span, err)
-			}
-
-			content = fixed
-		}
-
-		result, err := statement.ExecContext(ctx,
-			sql.Named("id", edition.Key),
-			sql.Named("data", content),
-		)
-		if err != nil {
-			return err
-		}
-		rows, err := result.RowsAffected()
-		if err != nil {
-			return tracing.Error(span, err)
-		}
-		count += rows
-
-		if count%5000 == 0 {
-			fmt.Print(".")
-		}
-	}
-
-	fmt.Println()
-	fmt.Println("Committing")
-	if err := tx.Commit(); err != nil {
-		return tracing.Error(span, err)
-	}
-
-	return nil
-}
-
-func (c *ImportCommand) fixAuthors(ctx context.Context, content []byte) ([]byte, error) {
+func (c *ImportCommand) fixAuthors(ctx context.Context, content []byte) (string, []byte, error) {
 	ctx, span := tr.Start(ctx, "fix_authors")
 	defer span.End()
 
@@ -454,7 +368,7 @@ func (c *ImportCommand) fixAuthors(ctx context.Context, content []byte) ([]byte,
 
 	edition := &dto{}
 	if err := json.Unmarshal(content, edition); err != nil {
-		return nil, tracing.Error(span, err)
+		return "", nil, tracing.Error(span, err)
 	}
 
 	span.SetAttributes(attribute.String("edition.key", edition.Key))
@@ -467,19 +381,19 @@ func (c *ImportCommand) fixAuthors(ctx context.Context, content []byte) ([]byte,
 	// now re-unmarshal the content into a map[string]any, so we can replace the bad authors with good authors
 	record := map[string]any{}
 	if err := json.Unmarshal(content, &record); err != nil {
-		return nil, tracing.Error(span, err)
+		return "", nil, tracing.Error(span, err)
 	}
 
 	record["authors"] = fixed
 
 	repaired, err := json.Marshal(record)
 	if err != nil {
-		return nil, tracing.Errorf(span, "error processing %s: %w", edition.Key, err)
+		return "", nil, tracing.Errorf(span, "error processing %s: %w", edition.Key, err)
 	}
 
 	fmt.Println(edition.Key, "authors fixed")
 
-	return repaired, nil
+	return edition.Key, repaired, nil
 }
 
 type recordDto struct {
