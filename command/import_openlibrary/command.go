@@ -11,6 +11,8 @@ import (
 	"kirjasto/tracing"
 	"os"
 	"path"
+	"strings"
+	"time"
 
 	"github.com/spf13/pflag"
 	"go.opentelemetry.io/otel"
@@ -48,6 +50,21 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 	}
 
 	dir := args[0]
+	bestAuthors, bestEditions, err := c.findDumpFiles(ctx, dir)
+	if err != nil {
+		return tracing.Error(span, err)
+	}
+
+	if bestAuthors == "" {
+		return tracing.Errorf(span, "unable to find an authors dump file")
+	}
+	if bestEditions == "" {
+		return tracing.Errorf(span, "unable to find an editions dump file")
+	}
+
+	fmt.Println("Importing OpenLibrary Dumps:")
+	fmt.Println("-", bestAuthors)
+	fmt.Println("-", bestEditions)
 
 	writer, err := storage.Writer(ctx, config.OpenLibraryDb)
 	if err != nil {
@@ -58,7 +75,7 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		return tracing.Error(span, err)
 	}
 
-	authorsFile, err := os.Open(path.Join(dir, "ol_dump_authors_2025-02-11.txt"))
+	authorsFile, err := os.Open(path.Join(dir, bestAuthors))
 	if err != nil {
 		return tracing.Error(span, err)
 	}
@@ -68,7 +85,7 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 		return tracing.Error(span, err)
 	}
 
-	editionsFile, err := os.Open(path.Join(dir, "ol_dump_editions_2025-02-11.txt"))
+	editionsFile, err := os.Open(path.Join(dir, bestEditions))
 	if err != nil {
 		return tracing.Error(span, err)
 	}
@@ -83,6 +100,56 @@ func (c *ImportCommand) Execute(ctx context.Context, config *config.Config, args
 	}
 
 	return nil
+}
+
+func (c *ImportCommand) findDumpFiles(ctx context.Context, dir string) (string, string, error) {
+	ctx, span := tr.Start(ctx, "find_dump_files")
+	defer span.End()
+
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return "", "", tracing.Error(span, err)
+	}
+
+	bestAuthor := ""
+	authorTs := time.Time{}
+
+	bestEdition := ""
+	editionTs := time.Time{}
+
+	for _, file := range files {
+
+		name, found := strings.CutSuffix(file.Name(), ".txt")
+		if !found {
+			continue
+		}
+
+		if d, found := strings.CutPrefix(name, "ol_dump_authors_"); found {
+			ts, err := time.Parse("2006-01-02", d)
+			if err != nil {
+				return "", "", tracing.Error(span, err)
+			}
+
+			if ts.After(authorTs) {
+				bestAuthor = file.Name()
+				authorTs = ts
+			}
+		}
+		if d, found := strings.CutPrefix(name, "ol_dump_editions_"); found {
+			ts, err := time.Parse("2006-01-02", d)
+			if err != nil {
+				return "", "", tracing.Error(span, err)
+			}
+
+			if ts.After(editionTs) {
+				bestEdition = file.Name()
+				editionTs = ts
+			}
+		}
+
+	}
+
+	return bestAuthor, bestEdition, nil
 }
 
 func (c *ImportCommand) createTables(ctx context.Context, writer *sql.DB) error {
