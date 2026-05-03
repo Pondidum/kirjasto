@@ -2,6 +2,7 @@ package library
 
 import (
 	"context"
+	"fmt"
 	"kirjasto/config"
 	"kirjasto/domain"
 	"kirjasto/openlibrary"
@@ -77,6 +78,11 @@ func (c *AddCommand) Execute(ctx context.Context, config *config.Config, args []
 	bookInfo, err := openlib.FindBook(ctx, c.book.Title, c.book.Isbns)
 	if err != nil {
 		return tracing.Error(span, err)
+	}
+
+	if bookInfo == nil {
+		fmt.Println("Unable to find a matchin book")
+		return nil
 	}
 
 	err = libraryAction(ctx, config, func(library *domain.Library) error {
