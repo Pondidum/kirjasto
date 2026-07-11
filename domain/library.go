@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"kirjasto/goes"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -159,5 +160,9 @@ func (l *Library) FinishReading(isbn string, when time.Time) error {
 }
 
 func (l *Library) onBookFinished(e BookFinished) {
-	// ?
+	for _, book := range l.Books {
+		if slices.Contains(book.Isbns, e.Isbn) {
+			book.State = "read"
+		}
+	}
 }
