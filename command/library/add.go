@@ -24,6 +24,7 @@ func NewAddCommand() *AddCommand {
 type AddCommand struct {
 	book domain.BookInfo
 
+	isbns       []string
 	authors     []string
 	publishYear int
 	tags        []string
@@ -39,7 +40,7 @@ func (c *AddCommand) Synopsis() string {
 
 func (c *AddCommand) Flags() *pflag.FlagSet {
 	flags := pflag.NewFlagSet("add", pflag.ContinueOnError)
-	flags.StringSliceVar(&c.book.Isbns, "isbn", []string{}, "the book's isbn(s)")
+	flags.StringSliceVar(&c.isbns, "isbn", []string{}, "the book's isbn(s)")
 	flags.StringVar(&c.book.Title, "title", "", "the book's title")
 	flags.StringSliceVar(&c.authors, "author", []string{}, "the book's authors")
 	flags.IntVar(&c.publishYear, "publish-year", 0, "the year the book was published")
@@ -51,8 +52,13 @@ func (c *AddCommand) Execute(ctx context.Context, config *config.Config, args []
 	ctx, span := tr.Start(ctx, "execute")
 	defer span.End()
 
-	if len(c.book.Isbns) == 0 && c.book.Title == "" {
+	if len(c.isbns) == 0 && c.book.Title == "" {
 		return tracing.Errorf(span, "The books must have at least one of: isbn, title")
+	}
+
+	c.book.Isbns = make([]string, len(c.isbns))
+	for i, isbn := range c.isbns {
+		c.book.Isbns[i] = normaliseIsbn(isbn)
 	}
 
 	if c.publishYear > 0 {

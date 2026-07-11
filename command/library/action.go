@@ -6,6 +6,7 @@ import (
 	"kirjasto/domain"
 	"kirjasto/storage"
 	"kirjasto/tracing"
+	"strings"
 )
 
 func libraryAction(ctx context.Context, config *config.Config, action func(library *domain.Library) error) error {
@@ -36,4 +37,8 @@ func libraryAction(ctx context.Context, config *config.Config, action func(libra
 	}
 
 	return nil
+}
+
+func normaliseIsbn(isbn string) string {
+	return strings.ReplaceAll(isbn, "-", "")
 }

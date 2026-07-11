@@ -40,7 +40,7 @@ func (c *StartCommand) Execute(ctx context.Context, config *config.Config, args 
 		return tracing.Errorf(span, "this command takes exactly 1 argument: isbn")
 	}
 
-	isbn := args[0]
+	isbn := normaliseIsbn(args[0])
 	when := time.Now()
 	if c.when != "" {
 		t, err := time.Parse("2006-01-02", c.when)
