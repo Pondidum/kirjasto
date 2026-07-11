@@ -1,12 +1,16 @@
 package library
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"kirjasto/config"
 	"kirjasto/domain"
 	"kirjasto/openlibrary"
 	"kirjasto/tracing"
+	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/pflag"
@@ -81,14 +85,31 @@ func (c *AddCommand) Execute(ctx context.Context, config *config.Config, args []
 	if err != nil {
 		return tracing.Error(span, err)
 	}
-	bookInfo, err := openlib.FindBook(ctx, c.book.Title, c.book.Isbns)
+	matches, err := openlib.FindBooks(ctx, c.book)
 	if err != nil {
 		return tracing.Error(span, err)
 	}
 
-	if bookInfo == nil {
-		fmt.Println("Unable to find a matchin book")
-		return nil
+	var bookInfo *domain.BookInfo
+	switch len(matches) {
+	case 0:
+		// nothing
+	case 1:
+		bookInfo = &matches[0]
+	default:
+		for i, m := range matches {
+			fmt.Println(i, m.Title, m.Authors)
+		}
+		fmt.Println("which book to use?")
+		reader := bufio.NewReader(os.Stdin)
+		val, err := reader.ReadString('\n')
+		if err != nil {
+			return tracing.Error(span, err)
+		}
+		i, err := strconv.Atoi(val)
+		if err == nil {
+			bookInfo = &matches[i]
+		}
 	}
 
 	err = libraryAction(ctx, config, func(library *domain.Library) error {

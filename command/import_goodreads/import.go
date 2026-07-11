@@ -179,19 +179,19 @@ func processFile(ctx context.Context, openlib *openlibrary.Client, library *doma
 			return tracing.Error(span, err)
 		}
 
-		info, err := openlib.FindBook(ctx, book.Title, book.Isbns)
+		matches, err := openlib.FindBooks(ctx, book)
 		if err != nil {
 			return tracing.Error(span, err)
 		}
 
-		if info == nil {
+		if len(matches) == 0 {
 			fmt.Println("no openlibrary data found")
 			continue
 		}
 
 		fmt.Println("added openlibrary data")
 
-		if err := library.AddBookInfo(bookId, *info); err != nil {
+		if err := library.AddBookInfo(bookId, matches[0]); err != nil {
 			return tracing.Error(span, err)
 		}
 	}

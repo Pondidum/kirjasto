@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"kirjasto/config"
+	"kirjasto/domain"
 	"kirjasto/openlibrary"
 	"kirjasto/tracing"
 	"kirjasto/util/columnize"
@@ -49,7 +50,10 @@ func (c *SearchCommand) Execute(ctx context.Context, config *config.Config, args
 		return tracing.Error(span, err)
 	}
 
-	books, err := openlib.FindBooks(ctx, searchTerm, []string{searchTerm})
+	books, err := openlib.FindBooks(ctx, domain.BookInfo{
+		Isbns: []string{searchTerm},
+		Title: searchTerm,
+	})
 	if err != nil {
 		return tracing.Error(span, err)
 	}
@@ -64,7 +68,7 @@ func (c *SearchCommand) Execute(ctx context.Context, config *config.Config, args
 			author = book.Authors[0].Name
 		}
 
-		lines = append(lines, fmt.Sprintf(" %s | %s | %s", book.Isbns[0], book.Title, author))
+		lines = append(lines, fmt.Sprintf(" %s | %s | %s", book.Isbns, book.Title, author))
 	}
 
 	fmt.Println(columnize.SimpleFormat(lines))

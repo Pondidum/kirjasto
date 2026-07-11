@@ -19,8 +19,8 @@ type scannable interface {
 	Scan(dest ...any) error
 }
 
-func asBooks(rows scannable) ([]*domain.BookInfo, error) {
-	books := []*domain.BookInfo{}
+func asBooks(rows scannable) ([]domain.BookInfo, error) {
+	books := []domain.BookInfo{}
 
 	for rows.Next() {
 
@@ -42,19 +42,19 @@ func asBooks(rows scannable) ([]*domain.BookInfo, error) {
 	return books, nil
 }
 
-func asBook(editionJson string, authorJson string) (*domain.BookInfo, error) {
+func asBook(editionJson string, authorJson string) (domain.BookInfo, error) {
 
 	authors, err := authorsFromJson(authorJson)
 	if err != nil {
-		return nil, err
+		return domain.BookInfo{}, err
 	}
 
 	editionDto := editionDto{}
 	if err := json.Unmarshal([]byte(editionJson), &editionDto); err != nil {
-		return nil, err
+		return domain.BookInfo{}, err
 	}
 
-	book := &domain.BookInfo{
+	book := domain.BookInfo{
 		Title:    editionDto.Title,
 		Subtitle: editionDto.Subtitle,
 		Isbns:    append(editionDto.Isbn13, editionDto.Isbn10...),
